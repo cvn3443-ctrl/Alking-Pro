@@ -11,6 +11,18 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late final WebViewController _controller;
   int _currentIndex = 0;
+  bool _botActive = false;
+
+  void _toggleBot() {
+    setState(() {
+      _botActive = !_botActive;
+      if (_botActive) {
+        _controller.runJavaScript('alert("Bot Started!")');
+      } else {
+        _controller.runJavaScript('alert("Bot Stopped!")');
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -23,6 +35,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        onPressed: _toggleBot,
+        backgroundColor: _botActive ? Colors.red : Colors.green,
+        child: Icon(_botActive ? Icons.stop : Icons.play_arrow),
+      ),
       body: IndexedStack(
         index: _currentIndex,
         children: [
