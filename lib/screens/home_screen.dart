@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:math';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -67,7 +68,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // حساب RSI
   double _calculateRSI(List<double> prices, int period) {
     if (prices.length < period + 1) return 50;
     
@@ -82,7 +82,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return 100 - (100 / (1 + rs));
   }
 
-  // حساب EMA
   double _calculateEMA(List<double> prices, int period) {
     if (prices.length < period) return prices.last;
     double multiplier = 2 / (period + 1);
@@ -93,7 +92,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return ema;
   }
 
-  // حساب MACD (تقاطع)
   bool _isMACDBullish(List<double> prices) {
     if (prices.length < 26) return false;
     
@@ -105,7 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
     double ema26Prev = _calculateEMA(prices.sublist(0, prices.length - 1), 26);
     double macdPrev = ema12Prev - ema26Prev;
     
-    double signal9 = _calculateEMA([...prices.map((e) => e)], 9);
+    double signal9 = _calculateEMA(prices, 9);
     double signal9Prev = _calculateEMA(prices.sublist(0, prices.length - 1), 9);
     
     return macd > signal9 && macdPrev <= signal9Prev;
@@ -122,19 +120,18 @@ class _HomeScreenState extends State<HomeScreen> {
     double ema26Prev = _calculateEMA(prices.sublist(0, prices.length - 1), 26);
     double macdPrev = ema12Prev - ema26Prev;
     
-    double signal9 = _calculateEMA([...prices.map((e) => e)], 9);
+    double signal9 = _calculateEMA(prices, 9);
     double signal9Prev = _calculateEMA(prices.sublist(0, prices.length - 1), 9);
     
     return macd < signal9 && macdPrev >= signal9Prev;
   }
 
-  // حساب Bollinger Bands
   bool _isPriceAtLowerBand(List<double> prices) {
     if (prices.length < 20) return false;
     
     double sma = prices.sublist(prices.length - 20).reduce((a, b) => a + b) / 20;
     double variance = prices.sublist(prices.length - 20).map((p) => (p - sma) * (p - sma)).reduce((a, b) => a + b) / 20;
-    double stdDev = variance.sqrt();
+    double stdDev = sqrt(variance);
     double lowerBand = sma - (2 * stdDev);
     
     return prices.last <= lowerBand;
@@ -145,13 +142,12 @@ class _HomeScreenState extends State<HomeScreen> {
     
     double sma = prices.sublist(prices.length - 20).reduce((a, b) => a + b) / 20;
     double variance = prices.sublist(prices.length - 20).map((p) => (p - sma) * (p - sma)).reduce((a, b) => a + b) / 20;
-    double stdDev = variance.sqrt();
+    double stdDev = sqrt(variance);
     double upperBand = sma + (2 * stdDev);
     
     return prices.last >= upperBand;
   }
 
-  // فلتر الاتجاه العام (EMA 50)
   bool _isUptrend(List<double> prices) {
     if (prices.length < 50) return true;
     double ema50 = _calculateEMA(prices, 50);
@@ -164,7 +160,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return prices.last < ema50;
   }
 
-  // جلب السعر الحقيقي
   Future<double> _getCurrentPrice() async {
     try {
       final result = await _controller.runJavaScriptReturningResult('''
@@ -181,12 +176,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // جلب بيانات تاريخية
   Future<void> _fetchHistoricalPrices() async {
     _prices = List.generate(60, (i) => 1.0 + (i % 20) / 100 + (DateTime.now().millisecondsSinceEpoch % 100) / 1000);
   }
 
-  // اختيار الزوج
   Future<void> _selectPair() async {
     await _controller.runJavaScript('''
       (function() {
@@ -206,7 +199,6 @@ class _HomeScreenState extends State<HomeScreen> {
     await Future.delayed(const Duration(seconds: 2));
   }
 
-  // تحديد المبلغ
   Future<void> _setAmount() async {
     double amount = _isPercentage ? 0 : double.parse(_amountController.text);
     await _controller.runJavaScript('''
@@ -221,7 +213,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ''');
   }
 
-  // تحديد المدة
   Future<void> _setDuration() async {
     await _controller.runJavaScript('''
       (function() {
@@ -236,7 +227,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ''');
   }
 
-  // التحقق من حساب تجريبي/حقيقي
   Future<void> _switchAccount() async {
     if (_selectedAccount == 'تجريبي') {
       await _controller.runJavaScript('''
@@ -257,7 +247,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // تنفيذ صفقة
   Future<void> _executeRealTrade(String direction) async {
     await _selectPair();
     await _setAmount();
@@ -270,7 +259,6 @@ class _HomeScreenState extends State<HomeScreen> {
     await _controller.runJavaScript(jsCode);
   }
 
-  // التحليل الأقوى (RSI + MACD + BB + Trend Filter)
   Future<String> _analyzeMarketStrong() async {
     await _fetchHistoricalPrices();
     if (_prices.isEmpty) return 'HOLD';
@@ -283,22 +271,14 @@ class _HomeScreenState extends State<HomeScreen> {
     bool uptrend = _isUptrend(_prices);
     bool downtrend = _isDowntrend(_prices);
     
-    // إشارة شراء قوية (4 شروط)
     if (rsi < 25 && macdBullish && atLowerBand && uptrend) return 'BUY';
-    
-    // إشارة بيع قوية (4 شروط)
     if (rsi > 75 && macdBearish && atUpperBand && downtrend) return 'SELL';
-    
-    // إشارة شراء متوسطة (3 شروط بدون فلتر الاتجاه)
     if (rsi < 25 && macdBullish && atLowerBand) return 'BUY';
-    
-    // إشارة بيع متوسطة (3 شروط بدون فلتر الاتجاه)
     if (rsi > 75 && macdBearish && atUpperBand) return 'SELL';
     
     return 'HOLD';
   }
 
-  // دورة التداول
   void _startTrading() async {
     await _switchAccount();
     await Future.delayed(const Duration(seconds: 5));
