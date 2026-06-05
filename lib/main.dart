@@ -1,13 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'screens/activation_screen.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // طلب أذن الإنترنت عند بدء التشغيل
-  await Permission.internet.request();
-  
+void main() {
   runApp(const AlkingProApp());
 }
 
