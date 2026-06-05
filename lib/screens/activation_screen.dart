@@ -36,7 +36,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('https://your-server.com/verify'),
+        Uri.parse('https://alking-server.onrender.com/verify'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'code': code}),
       );
