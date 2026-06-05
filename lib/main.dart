@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/activation_screen.dart';
+import 'screens/home_screen.dart';
 
 void main() {
   runApp(const AlkingProApp());
@@ -13,7 +13,7 @@ class AlkingProApp extends StatelessWidget {
     return MaterialApp(
       title: 'Alking Pro',
       theme: ThemeData.dark(),
-      home: const ActivationScreen(),
+      home: const HomeScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
