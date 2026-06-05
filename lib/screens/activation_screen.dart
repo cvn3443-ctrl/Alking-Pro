@@ -3,7 +3,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'home_screen.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 class ActivationScreen extends StatefulWidget {
   const ActivationScreen({super.key});
@@ -17,14 +16,9 @@ class _ActivationScreenState extends State<ActivationScreen> {
   bool _isLoading = false;
   String _errorMessage = '';
 
-  Future<void> _requestPermissions() async {
-    await Permission.internet.request();
-  }
-
   @override
   void initState() {
     super.initState();
-    _requestPermissions();
   }
 
   Future<void> _activate() async {
