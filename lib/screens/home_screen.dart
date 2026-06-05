@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -9,39 +10,90 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // --- متغيرات الحالة والإعدادات ---
+  // متغيرات البوت
   bool _botActive = false;
-  int _todayTrades = 0;           // عدد الصفقات المنفذة اليوم
-  int _maxTradesPerDay = 50;      // الحد الأقصى للصفقات في اليوم
+  int _todayTrades = 0;
+  int _maxTradesPerDay = 50;
+  int _targetTrades = 5;      // عدد الصفقات المطلوب (أنت تختاره)
+  int _completedTrades = 0;
+  int _lossCount = 0;          // عدد الخسائر المتتالية
+  int _winCount = 0;           // عدد الأرباح المتتالية
   
-  // إعدادات البوت
   String _selectedPair = 'EUR/USD';
   final TextEditingController _amountController = TextEditingController(text: '10');
   String _selectedDuration = '5';
   String _selectedAccount = 'تجريبي';
   bool _isPercentage = false;
   
-  // الإعدادات الجديدة
-  int _targetTrades = 5;           // عدد الصفقات المطلوب تنفيذها
-  int _completedTrades = 0;        // عدد الصفقات المنفذة
-  
-  // قائمة العملات المتاحة
-  final List<String> _availableAssets = [
+  List<String> _availableAssets = [
     'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'BTC/USD',
     'ETH/USD', 'XAU/USD', 'EUR/GBP', 'USD/CAD', 'NZD/USD'
   ];
-
-  // --- سجل الصفقات ---
+  
   List<Map<String, dynamic>> _tradeLog = [];
+  
+  // متغيرات API
+  String? _ssid;
+  bool _isLoggedIn = false;
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
     _loadTradeLog();
+    _loadSsid();
   }
 
-  // --- تحميل وحفظ الإعدادات وسجل الصفقات ---
+  Future<void> _loadSsid() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _ssid = prefs.getString('ssid');
+      _isLoggedIn = _ssid != null;
+    });
+  }
+
+  Future<void> _saveSsid(String ssid) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('ssid', ssid);
+    setState(() {
+      _ssid = ssid;
+      _isLoggedIn = true;
+    });
+  }
+
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    
+    if (email.isEmpty || password.isEmpty) {
+      _showSnackbar('أدخل البريد الإلكتروني وكلمة السر');
+      return;
+    }
+    
+    setState(() => _isLoggedIn = false);
+    
+    final ssid = await ApiService.login(email, password);
+    if (ssid != null) {
+      await _saveSsid(ssid);
+      _showSnackbar('✅ تم تسجيل الدخول بنجاح');
+      
+      final assets = await ApiService.getAssets(ssid);
+      setState(() {
+        _availableAssets.clear();
+        _availableAssets.addAll(assets);
+      });
+    } else {
+      _showSnackbar('❌ فشل تسجيل الدخول');
+      setState(() => _isLoggedIn = true);
+    }
+  }
+
+  void _showSnackbar(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
   Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('pair', _selectedPair);
@@ -52,12 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.setInt('maxTradesPerDay', _maxTradesPerDay);
     await prefs.setInt('targetTrades', _targetTrades);
     
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم حفظ الإعدادات ✅')),
-      );
-      setState(() {});
-    }
+    _showSnackbar('تم حفظ الإعدادات ✅');
   }
 
   Future<void> _loadSettings() async {
@@ -78,7 +125,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final int? savedTrades = prefs.getInt('todayTrades');
     setState(() {
       _todayTrades = savedTrades ?? 0;
-      _tradeLog = [];
     });
   }
 
@@ -87,7 +133,6 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.setInt('todayTrades', _todayTrades);
   }
 
-  // --- وظائف إدارة البوت وسجل الصفقات ---
   void _addTrade(String pair, String result, double amount, String duration) {
     setState(() {
       _tradeLog.insert(0, {
@@ -104,39 +149,76 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _botActive = false;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('⏹️ توقف البوت: $reason')),
+    _showSnackbar('⏹️ توقف البوت: $reason');
+  }
+
+  Future<void> _executeTradeLogic() async {
+    if (_ssid == null) return;
+    
+    final amount = _isPercentage ? 0.0 : double.parse(_amountController.text);
+    final duration = int.parse(_selectedDuration);
+    
+    // 🔥 هنا التحليل (مؤقتاً نستخدم BUY فقط، سيتم إضافة التحليل الحقيقي لاحقاً)
+    final action = 'BUY';
+    
+    final success = await ApiService.executeTrade(
+      ssid: _ssid!,
+      action: action,
+      pair: _selectedPair,
+      amount: amount,
+      duration: duration,
     );
+    
+    if (success) {
+      _addTrade(_selectedPair, 'فوز 🟢', amount, _selectedDuration);
+      _winCount++;
+      _lossCount = 0;
+    } else {
+      _addTrade(_selectedPair, 'خسارة 🔴', amount, _selectedDuration);
+      _lossCount++;
+      _winCount = 0;
+    }
+    
+    _completedTrades++;
+    _todayTrades++;
+    await _saveTradeLog();
+    setState(() {});
   }
 
   void _startTrading() async {
     _completedTrades = 0;
+    _winCount = 0;
+    _lossCount = 0;
     setState(() {});
     
     while (_botActive && _completedTrades < _targetTrades) {
-      // التحقق من عدد الصفقات في اليوم
-      if (_todayTrades >= _maxTradesPerDay) {
-        _stopBot('تم الوصول للحد الأقصى للصفقات اليومية');
+      // شرط الإيقاف: خسارتين متتاليتين
+      if (_lossCount >= 2) {
+        _stopBot('خسارتين متتاليتين ⚠️');
         return;
       }
       
-      // تنفيذ صفقة (محاكاة حالياً)
-      final amount = _isPercentage ? 0.0 : double.parse(_amountController.text);
-      _addTrade(_selectedPair, 'فوز 🟢', amount, _selectedDuration);
+      // شرط الإيقاف: ربح خمس صفقات متتالية
+      if (_winCount >= 5) {
+        _stopBot('5 أرباح متتالية 🏆');
+        return;
+      }
       
-      _completedTrades++;
-      _todayTrades++;
-      await _saveTradeLog();
-      setState(() {});
+      // التحقق من الحد اليومي
+      if (_todayTrades >= _maxTradesPerDay) {
+        _stopBot('تم الوصول للحد الأقصى اليومي');
+        return;
+      }
       
-      // إذا لم تكن هذه آخر صفقة، انتظر وقت عشوائي بين 5-15 دقيقة
-      if (_completedTrades < _targetTrades) {
-        int waitMinutes = 5 + (DateTime.now().second % 11); // 5 إلى 15 دقيقة
+      // تنفيذ الصفقة
+      await _executeTradeLogic();
+      
+      // إذا لم تكن آخر صفقة، انتظر وقت عشوائي بين 5-15 دقيقة
+      if (_completedTrades < _targetTrades && _botActive) {
+        int waitMinutes = 5 + (DateTime.now().second % 11);
         int waitSeconds = waitMinutes * 60;
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('⏳ انتظار $waitMinutes دقائق قبل الصفقة التالية')),
-        );
+        _showSnackbar('⏳ انتظار $waitMinutes دقيقة قبل الصفقة التالية');
         
         for (int i = 0; i < waitSeconds && _botActive; i++) {
           await Future.delayed(const Duration(seconds: 1));
@@ -144,8 +226,8 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
     
-    if (_completedTrades >= _targetTrades && _botActive) {
-      _stopBot('تم تنفيذ $_targetTrades صفقات 🎯');
+    if (_botActive && _completedTrades >= _targetTrades) {
+      _stopBot('تم $_targetTrades صفقات 🎯');
     }
   }
 
@@ -155,11 +237,13 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     
-    // التحقق من عدد الصفقات في اليوم
+    if (!_isLoggedIn) {
+      _showSnackbar('سجل الدخول أولاً');
+      return;
+    }
+    
     if (_todayTrades >= _maxTradesPerDay) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✅ تم الوصول للحد الأقصى للصفقات اليومية')),
-      );
+      _showSnackbar('الحد اليومي اكتمل');
       return;
     }
 
@@ -168,7 +252,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _startTrading();
   }
 
-  // --- واجهة المستخدم ---
   void _showSettingsPanel() {
     showModalBottomSheet(
       context: context,
@@ -203,7 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 15),
                   
-                  // عدد الصفقات في الساعة
+                  // عدد الصفقات (من 1 إلى 10)
                   Row(
                     children: [
                       const Text('عدد الصفقات:'),
@@ -268,7 +351,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 15),
 
-                  // الحد الأقصى للصفقات اليومية
+                  // الحد اليومي
                   Row(
                     children: [
                       const Text('الحد اليومي:'),
@@ -312,7 +395,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final remainingTrades = _maxTradesPerDay - _todayTrades;
     final remainingTarget = _targetTrades - _completedTrades;
     
     return Scaffold(
@@ -331,123 +413,202 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: _botActive ? Colors.red : Colors.green,
         child: Icon(_botActive ? Icons.stop : Icons.play_arrow),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // --- بطاقة الحالة والإعدادات الحالية ---
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: _isLoggedIn
+          ? Row(
+              children: [
+                // الجزء الأيسر: سجل الصفقات
+                Expanded(
+                  flex: 1,
+                  child: Container(
+                    color: Colors.grey[900],
+                    child: Column(
                       children: [
-                        const Text('الحالة:', style: TextStyle(fontSize: 18)),
-                        Text(
-                          _botActive ? 'نشط ✅' : 'غير نشط ⏹️',
-                          style: TextStyle(fontSize: 18, color: _botActive ? Colors.green : Colors.grey),
+                        Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('الحالة:'),
+                                  Text(_botActive ? 'نشط ✅' : 'غير نشط', style: TextStyle(color: _botActive ? Colors.green : Colors.grey)),
+                                ],
+                              ),
+                              const Divider(),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('صفقات اليوم:'),
+                                  Text('$_todayTrades / $_maxTradesPerDay'),
+                                ],
+                              ),
+                              if (_botActive) ...[
+                                const SizedBox(height: 5),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('المتبقي:'),
+                                    Text('$remainingTarget / $_targetTrades'),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('أرباح متتالية:'),
+                                    Text('$_winCount', style: const TextStyle(color: Colors.green)),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('خسائر متتالية:'),
+                                    Text('$_lossCount', style: const TextStyle(color: Colors.red)),
+                                  ],
+                                ),
+                              ],
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[800],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Text('الزوج: $_selectedPair', style: const TextStyle(fontSize: 12)),
+                                    Text('المبلغ: ${_isPercentage ? "2%" : "${_amountController.text} دولار"}', style: const TextStyle(fontSize: 12)),
+                                    Text('المدة: $_selectedDuration دقيقة', style: const TextStyle(fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('سجل الصفقات', style: TextStyle(fontWeight: FontWeight.bold)),
+                                    TextButton.icon(
+                                      onPressed: () {
+                                        setState(() {
+                                          _tradeLog.clear();
+                                          _todayTrades = 0;
+                                          _completedTrades = 0;
+                                          _winCount = 0;
+                                          _lossCount = 0;
+                                        });
+                                        _saveTradeLog();
+                                      },
+                                      icon: const Icon(Icons.delete, size: 16),
+                                      label: const Text('مسح'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                child: _tradeLog.isEmpty
+                                    ? const Center(child: Text('لا صفقات بعد'))
+                                    : ListView.builder(
+                                        itemCount: _tradeLog.length,
+                                        itemBuilder: (context, index) {
+                                          final trade = _tradeLog[index];
+                                          return ListTile(
+                                            dense: true,
+                                            leading: Icon(
+                                              trade['result'] == 'فوز 🟢' ? Icons.arrow_upward : Icons.arrow_downward,
+                                              color: trade['result'] == 'فوز 🟢' ? Colors.green : Colors.red,
+                                              size: 16,
+                                            ),
+                                            title: Text('${trade['pair']} - ${trade['result']}', style: const TextStyle(fontSize: 12)),
+                                            subtitle: Text('${trade['amount']} \$ | ${trade['duration']} د', style: const TextStyle(fontSize: 10)),
+                                            trailing: Text(trade['time'], style: const TextStyle(fontSize: 10)),
+                                          );
+                                        },
+                                      ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                    const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  ),
+                ),
+                // الجزء الأيمن: معلومات API
+                Expanded(
+                  flex: 2,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text('الزوج:'),
-                        Text(_selectedPair),
+                        const Icon(Icons.api, size: 80, color: Colors.green),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'API Mode Active',
+                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text('تم تسجيل الدخول بنجاح'),
+                        const SizedBox(height: 10),
+                        Text('الزوج الحالي: $_selectedPair'),
+                        Text('المبلغ: ${_isPercentage ? "2%" : "${_amountController.text} \$"}'),
+                        Text('المدة: $_selectedDuration دقيقة'),
+                        const SizedBox(height: 20),
+                        if (!_botActive)
+                          ElevatedButton.icon(
+                            onPressed: _toggleBot,
+                            icon: const Icon(Icons.play_arrow),
+                            label: const Text('بدء التداول'),
+                          ),
+                        if (_botActive)
+                          const Text('البوت يعمل...', style: TextStyle(color: Colors.green)),
                       ],
                     ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('المبلغ:'),
-                        Text(_isPercentage ? "2%" : "${_amountController.text} دولار"),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('المدة:'),
-                        Text("$_selectedDuration دقيقة"),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('الحساب:'),
-                        Text(_selectedAccount),
-                      ],
-                    ),
-                    const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('صفقات اليوم:'),
-                        Text('$_todayTrades / $_maxTradesPerDay'),
-                      ],
-                    ),
-                    if (_botActive) ...[
-                      const SizedBox(height: 5),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('المتبقي من الهدف:'),
-                          Text('$remainingTarget / $_targetTrades'),
-                        ],
+                  ),
+                ),
+              ],
+            )
+          : Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.lock, size: 80, color: Colors.grey),
+                    const SizedBox(height: 20),
+                    const Text('تسجيل الدخول إلى حساب Quotex', style: TextStyle(fontSize: 20)),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: _emailController,
+                      decoration: const InputDecoration(
+                        labelText: 'البريد الإلكتروني',
+                        border: OutlineInputBorder(),
                       ),
-                    ],
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _passwordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'كلمة السر',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: _login,
+                      icon: const Icon(Icons.login),
+                      label: const Text('تسجيل الدخول'),
+                    ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-
-            // --- سجل الصفقات ---
-            Row(
-              children: [
-                const Icon(Icons.history, size: 20),
-                const SizedBox(width: 8),
-                const Text('سجل الصفقات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _tradeLog.clear();
-                      _todayTrades = 0;
-                      _completedTrades = 0;
-                    });
-                    _saveTradeLog();
-                  },
-                  icon: const Icon(Icons.delete, size: 16),
-                  label: const Text('مسح الكل'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: _tradeLog.isEmpty
-                  ? const Center(child: Text('لا توجد صفقات بعد'))
-                  : ListView.builder(
-                      itemCount: _tradeLog.length,
-                      itemBuilder: (context, index) {
-                        final trade = _tradeLog[index];
-                        return ListTile(
-                          leading: Icon(
-                            trade['result'] == 'فوز 🟢' ? Icons.arrow_upward : Icons.arrow_downward,
-                            color: trade['result'] == 'فوز 🟢' ? Colors.green : Colors.red,
-                          ),
-                          title: Text('${trade['pair']} - ${trade['result']}'),
-                          subtitle: Text('المبلغ: ${trade['amount']} دولار | المدة: ${trade['duration']} دقيقة'),
-                          trailing: Text(trade['time']),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
