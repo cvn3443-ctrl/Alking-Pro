@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -8,21 +9,27 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  late final WebViewController _controller;
   int _currentIndex = 0;
 
-  final List<Widget> _screens = [
-    const Center(child: Text('شاشة التداول - قيد التطوير')),
-    const Center(child: Text('شاشة الإعدادات - قيد التطوير')),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..loadRequest(Uri.parse('https://qxbroker.com'));
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Alking Pro'),
-        centerTitle: true,
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          WebViewWidget(controller: _controller),
+          const Center(child: Text('شاشة الإعدادات - قيد التطوير')),
+        ],
       ),
-      body: _screens[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
