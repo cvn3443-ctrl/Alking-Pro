@@ -11,9 +11,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   // --- متغيرات الحالة والإعدادات ---
   bool _botActive = false;
-  int _todayTrades = 0;          // عدد الصفقات المنفذة اليوم
-  int _maxTradesPerDay = 50;     // الحد الأقصى للصفقات في اليوم
-  int _sleepSeconds = 180;        // وقت الانتظار بين الصفقات (بالثواني)
+  int _todayTrades = 0;           // عدد الصفقات المنفذة اليوم
+  int _maxTradesPerDay = 50;      // الحد الأقصى للصفقات في اليوم
   
   // إعدادات البوت
   String _selectedPair = 'EUR/USD';
@@ -22,20 +21,24 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedAccount = 'تجريبي';
   bool _isPercentage = false;
   
+  // الإعدادات الجديدة
+  int _targetTrades = 5;           // عدد الصفقات المطلوب تنفيذها
+  int _completedTrades = 0;        // عدد الصفقات المنفذة
+  
   // قائمة العملات المتاحة
   final List<String> _availableAssets = [
     'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'BTC/USD',
     'ETH/USD', 'XAU/USD', 'EUR/GBP', 'USD/CAD', 'NZD/USD'
   ];
 
-  // --- سجل الصفقات (قائمة) ---
+  // --- سجل الصفقات ---
   List<Map<String, dynamic>> _tradeLog = [];
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
-    _loadTradeLog(); // تحميل سجل الصفقات من التخزين المحلي
+    _loadTradeLog();
   }
 
   // --- تحميل وحفظ الإعدادات وسجل الصفقات ---
@@ -47,13 +50,13 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.setString('account', _selectedAccount);
     await prefs.setBool('isPercentage', _isPercentage);
     await prefs.setInt('maxTradesPerDay', _maxTradesPerDay);
-    await prefs.setInt('sleepSeconds', _sleepSeconds);
+    await prefs.setInt('targetTrades', _targetTrades);
     
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم حفظ الإعدادات ✅')),
       );
-      _updateUIDisplay(); // تحديث الواجهة لعرض القيم الجديدة
+      setState(() {});
     }
   }
 
@@ -66,26 +69,21 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectedAccount = prefs.getString('account') ?? 'تجريبي';
       _isPercentage = prefs.getBool('isPercentage') ?? false;
       _maxTradesPerDay = prefs.getInt('maxTradesPerDay') ?? 50;
-      _sleepSeconds = prefs.getInt('sleepSeconds') ?? 180;
+      _targetTrades = prefs.getInt('targetTrades') ?? 5;
     });
   }
 
   Future<void> _loadTradeLog() async {
     final prefs = await SharedPreferences.getInstance();
-    final String? logString = prefs.getString('tradeLog');
-    if (logString != null) {
-      // تحويل النص المخزن إلى قائمة (تنبيه: هذا مثال بسيط، استخدم jsonEncode لبيانات حقيقية)
-      setState(() {
-        _tradeLog = [];
-      });
-    }
-    // حساب عدد صفقات اليوم من الـ log
-    _todayTrades = _tradeLog.length;
+    final int? savedTrades = prefs.getInt('todayTrades');
+    setState(() {
+      _todayTrades = savedTrades ?? 0;
+      _tradeLog = [];
+    });
   }
 
   Future<void> _saveTradeLog() async {
     final prefs = await SharedPreferences.getInstance();
-    // تبسيطاً: سنخزن عدد الصفقات فقط. للإصدار المتقدم، استخدم jsonEncode.
     await prefs.setInt('todayTrades', _todayTrades);
   }
 
@@ -97,15 +95,58 @@ class _HomeScreenState extends State<HomeScreen> {
         'result': result,
         'amount': amount,
         'duration': duration,
-        'time': DateTime.now().toString().substring(11, 16), // HH:MM
+        'time': DateTime.now().toString().substring(11, 16),
       });
-      _todayTrades++;
     });
-    _saveTradeLog();
   }
 
-  void _updateUIDisplay() {
-    setState(() {}); // تحديث الواجهة لإظهار الإعدادات الجديدة
+  void _stopBot(String reason) {
+    setState(() {
+      _botActive = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('⏹️ توقف البوت: $reason')),
+    );
+  }
+
+  void _startTrading() async {
+    _completedTrades = 0;
+    setState(() {});
+    
+    while (_botActive && _completedTrades < _targetTrades) {
+      // التحقق من عدد الصفقات في اليوم
+      if (_todayTrades >= _maxTradesPerDay) {
+        _stopBot('تم الوصول للحد الأقصى للصفقات اليومية');
+        return;
+      }
+      
+      // تنفيذ صفقة (محاكاة حالياً)
+      final amount = _isPercentage ? 0.0 : double.parse(_amountController.text);
+      _addTrade(_selectedPair, 'فوز 🟢', amount, _selectedDuration);
+      
+      _completedTrades++;
+      _todayTrades++;
+      await _saveTradeLog();
+      setState(() {});
+      
+      // إذا لم تكن هذه آخر صفقة، انتظر وقت عشوائي بين 5-15 دقيقة
+      if (_completedTrades < _targetTrades) {
+        int waitMinutes = 5 + (DateTime.now().second % 11); // 5 إلى 15 دقيقة
+        int waitSeconds = waitMinutes * 60;
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('⏳ انتظار $waitMinutes دقائق قبل الصفقة التالية')),
+        );
+        
+        for (int i = 0; i < waitSeconds && _botActive; i++) {
+          await Future.delayed(const Duration(seconds: 1));
+        }
+      }
+    }
+    
+    if (_completedTrades >= _targetTrades && _botActive) {
+      _stopBot('تم تنفيذ $_targetTrades صفقات 🎯');
+    }
   }
 
   void _toggleBot() async {
@@ -114,28 +155,17 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     
-    // التحقق من عدد الصفقات المسموح بها
+    // التحقق من عدد الصفقات في اليوم
     if (_todayTrades >= _maxTradesPerDay) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('✅ تم الوصول للحد الأقصى للصفقات اليوم (${_maxTradesPerDay} صفقة)')),
+        const SnackBar(content: Text('✅ تم الوصول للحد الأقصى للصفقات اليومية')),
       );
       return;
     }
 
     setState(() => _botActive = true);
     await _saveSettings();
-    
-    // محاكاة الصفقة (للاختبار)
-    Future.delayed(const Duration(seconds: 2), () {
-      if (_botActive) {
-        final amount = _isPercentage ? 0.0 : double.parse(_amountController.text);
-        _addTrade(_selectedPair, 'فوز 🟢', amount, _selectedDuration);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ تم تنفيذ صفقة وهمية بقيمة ${amount.toStringAsFixed(2)} دولار')),
-        );
-        setState(() => _botActive = false); // إيقاف البوت بعد الصفقة
-      }
-    });
+    _startTrading();
   }
 
   // --- واجهة المستخدم ---
@@ -170,6 +200,28 @@ class _HomeScreenState extends State<HomeScreen> {
                     items: _availableAssets.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                     onChanged: (v) => setState(() => _selectedPair = v!),
                     decoration: const InputDecoration(labelText: 'الزوج'),
+                  ),
+                  const SizedBox(height: 15),
+                  
+                  // عدد الصفقات في الساعة
+                  Row(
+                    children: [
+                      const Text('عدد الصفقات:'),
+                      Expanded(
+                        child: Slider(
+                          value: _targetTrades.toDouble(),
+                          min: 1,
+                          max: 10,
+                          divisions: 9,
+                          label: '$_targetTrades صفقة',
+                          onChanged: (v) {
+                            setStateBottomSheet(() => _targetTrades = v.toInt());
+                            setState(() => _targetTrades = v.toInt());
+                          },
+                        ),
+                      ),
+                      Text('$_targetTrades'),
+                    ],
                   ),
                   const SizedBox(height: 15),
                   
@@ -219,7 +271,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   // الحد الأقصى للصفقات اليومية
                   Row(
                     children: [
-                      const Text('الحد الأقصى للصفقات:'),
+                      const Text('الحد اليومي:'),
                       Expanded(
                         child: Slider(
                           value: _maxTradesPerDay.toDouble(),
@@ -231,25 +283,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       Text('$_maxTradesPerDay'),
-                    ],
-                  ),
-                  const SizedBox(height: 5),
-
-                  // وقت الانتظار بين الصفقات (بالثواني)
-                  Row(
-                    children: [
-                      const Text('الانتظار بين الصفقات:'),
-                      Expanded(
-                        child: Slider(
-                          value: _sleepSeconds.toDouble(),
-                          min: 60,
-                          max: 600,
-                          divisions: 10,
-                          label: '${(_sleepSeconds / 60).toStringAsFixed(0)} دقيقة',
-                          onChanged: (v) => setState(() => _sleepSeconds = v.toInt()),
-                        ),
-                      ),
-                      Text('${(_sleepSeconds / 60).toStringAsFixed(0)} دقيقة'),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -280,16 +313,13 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final remainingTrades = _maxTradesPerDay - _todayTrades;
+    final remainingTarget = _targetTrades - _completedTrades;
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Alking Pro'),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _updateUIDisplay,
-            tooltip: 'تحديث الواجهة',
-          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: _showSettingsPanel,
@@ -354,10 +384,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('الصفقات المتبقية اليوم:'),
-                        Text('$remainingTrades / $_maxTradesPerDay'),
+                        const Text('صفقات اليوم:'),
+                        Text('$_todayTrades / $_maxTradesPerDay'),
                       ],
                     ),
+                    if (_botActive) ...[
+                      const SizedBox(height: 5),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('المتبقي من الهدف:'),
+                          Text('$remainingTarget / $_targetTrades'),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -376,6 +416,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     setState(() {
                       _tradeLog.clear();
                       _todayTrades = 0;
+                      _completedTrades = 0;
                     });
                     _saveTradeLog();
                   },
