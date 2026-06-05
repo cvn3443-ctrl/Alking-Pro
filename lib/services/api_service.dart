@@ -2,30 +2,50 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class ApiService {
-  // 🔥 غير هذا الرابط بعد ما تجهز السيرفر
-  static const String baseUrl = 'https://your-server.com/api';
+  // 🔥 غير هذا الرابط بعد ما ترفع السيرفر على PythonAnywhere
+  static const String baseUrl = 'https://your-username.pythonanywhere.com';
 
-  // تسجيل الدخول
-  static Future<String?> login(String email, String password) async {
+  // الخطوة 1: التحقق من صحة الكود والإيميل
+  static Future<Map<String, dynamic>> verifyLicense(String licenseKey, String email) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/login'),
+        Uri.parse('$baseUrl/api/verify_license'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
+        body: jsonEncode({'license_key': licenseKey, 'email': email}),
       );
+      
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['ssid'];
+        return jsonDecode(response.body);
+      } else {
+        return {'success': false, 'message': 'فشل الاتصال بالسيرفر'};
       }
-      return null;
     } catch (e) {
-      return null;
+      return {'success': false, 'message': 'خطأ في الاتصال'};
     }
   }
 
-  // تنفيذ صفقة
+  // الخطوة 2: تسجيل الدخول إلى Quotex
+  static Future<Map<String, dynamic>> loginToQuotex(String email, String password) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email, 'password': password}),
+      );
+      
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return {'success': false, 'message': 'فشل تسجيل الدخول إلى المنصة'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال'};
+    }
+  }
+
+  // الخطوة 3: تنفيذ صفقة
   static Future<bool> executeTrade({
-    required String ssid,
+    required String licenseKey,
     required String action,
     required String pair,
     required double amount,
@@ -33,10 +53,10 @@ class ApiService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/trade'),
+        Uri.parse('$baseUrl/api/trade'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'ssid': ssid,
+          'license_key': licenseKey,
           'action': action,
           'pair': pair,
           'amount': amount,
@@ -50,42 +70,6 @@ class ApiService {
       return false;
     } catch (e) {
       return false;
-    }
-  }
-
-  // جلب الرصيد
-  static Future<double> getBalance(String ssid) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/balance'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'ssid': ssid}),
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['balance'] ?? 0.0;
-      }
-      return 0.0;
-    } catch (e) {
-      return 0.0;
-    }
-  }
-
-  // جلب العملات
-  static Future<List<String>> getAssets(String ssid) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/assets'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'ssid': ssid}),
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return List<String>.from(data['assets']);
-      }
-      return ['EUR/USD', 'GBP/USD', 'BTC/USD'];
-    } catch (e) {
-      return ['EUR/USD', 'GBP/USD', 'BTC/USD'];
     }
   }
 }
