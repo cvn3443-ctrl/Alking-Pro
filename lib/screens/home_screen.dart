@@ -15,12 +15,11 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   bool _botActive = false;
   
-  // إعدادات البوت
   String _selectedPair = 'EUR/USD';
   String _selectedAmount = '10';
   String _selectedDuration = '5 دقائق';
   String _selectedAccount = 'تجريبي';
-  bool _isPercentage = false; // false = مبلغ ثابت, true = نسبة مئوية
+  bool _isPercentage = false;
   
   List<String> _availableAssets = ['EUR/USD', 'GBP/USD', 'BTC/USD'];
   bool _isLoadingAssets = true;
@@ -34,7 +33,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchAssets();
   }
 
-  // جلب العملات من المنصة
   Future<void> _fetchAssets() async {
     try {
       final response = await http.get(Uri.parse('https://qxbroker.com/api/assets'));
@@ -58,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _toggleBot() {
     setState(() {
       _botActive = !_botActive;
-      String amountText = _isPercentage ? '2% من الرصيد' : '$_selectedAmount $';
+      String amountText = _isPercentage ? '2% من الرصيد' : '$_selectedAmount دولار';
       if (_botActive) {
         _controller.runJavaScript('alert("Bot Started!\nالزوج: $_selectedPair\nالمبلغ: $amountText\nالمدة: $_selectedDuration\nالحساب: $_selectedAccount")');
       } else {
@@ -86,7 +84,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Text('إعدادات البوت', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 20),
                   
-                  // اختيار الزوج (يتحدث مع المنصة)
                   if (_isLoadingAssets)
                     const Center(child: CircularProgressIndicator())
                   else
@@ -98,7 +95,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   const SizedBox(height: 15),
                   
-                  // خيار المبلغ (ثابت أو نسبة)
                   SwitchListTile(
                     title: const Text('نسبة مئوية (2%)'),
                     value: _isPercentage,
@@ -112,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     DropdownButtonFormField<String>(
                       value: _selectedAmount,
                       items: ['5', '10', '25', '50', '100']
-                          .map((e) => DropdownMenuItem(value: e, child: Text('$e $'))).toList(),
+                          .map((e) => DropdownMenuItem(value: e, child: Text('$e دولار'))).toList(),
                       onChanged: (v) => setState(() => _selectedAmount = v!),
                       decoration: const InputDecoration(labelText: 'المبلغ الثابت'),
                     ),
@@ -123,7 +119,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   const SizedBox(height: 15),
                   
-                  // اختيار المدة
                   DropdownButtonFormField<String>(
                     value: _selectedDuration,
                     items: ['1 دقيقة', '5 دقائق', '15 دقيقة']
@@ -133,7 +128,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 15),
                   
-                  // اختيار نوع الحساب
                   DropdownButtonFormField<String>(
                     value: _selectedAccount,
                     items: ['تجريبي', 'حقيقي']
