@@ -56,7 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
     DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
     AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
     setState(() {
-      _deviceId = androidInfo.androidId;
+      _deviceId = androidInfo.id;  // ✅ تم التعديل: id بدلاً من androidId
     });
   }
 
