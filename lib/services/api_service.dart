@@ -2,16 +2,23 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class ApiService {
-  // 🔥 غير هذا الرابط بعد ما ترفع السيرفر على PythonAnywhere
-  static const String baseUrl = 'https://your-username.pythonanywhere.com';
+  static const String baseUrl = 'https://vgkmvf.pythonanywhere.com';
 
-  // الخطوة 1: التحقق من صحة الكود والإيميل
-  static Future<Map<String, dynamic>> verifyLicense(String licenseKey, String email) async {
+  // الخطوة 1: التحقق من الكود والإيميل والجهاز
+  static Future<Map<String, dynamic>> verifyLicense(
+    String licenseKey,
+    String email,
+    String deviceId,
+  ) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/api/verify_license'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'license_key': licenseKey, 'email': email}),
+        body: jsonEncode({
+          'license_key': licenseKey,
+          'email': email,
+          'device_id': deviceId,
+        }),
       );
       
       if (response.statusCode == 200) {
