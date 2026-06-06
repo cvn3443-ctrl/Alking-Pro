@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import '../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -10,19 +11,17 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // متغيرات الحالة
   bool _isLoading = false;
   bool _isLoggedIn = false;
-  int _step = 1; // 1: كود التفعيل, 2: تسجيل الدخول, 3: التداول
+  int _step = 1;
+  String? _deviceId;
   
-  // متغيرات التفعيل
   final TextEditingController _licenseController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   String? _currentLicense;
   String? _verifiedEmail;
   
-  // متغيرات البوت
   bool _botActive = false;
   int _todayTrades = 0;
   int _maxTradesPerDay = 50;
@@ -49,7 +48,16 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadSettings();
     _loadTradeLog();
+    _getDeviceId();
     _checkSavedState();
+  }
+
+  Future<void> _getDeviceId() async {
+    DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+    AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+    setState(() {
+      _deviceId = androidInfo.androidId;
+    });
   }
 
   Future<void> _checkSavedState() async {
@@ -67,7 +75,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // الخطوة 1: التحقق من الكود والإيميل
   Future<void> _verifyLicense() async {
     final licenseKey = _licenseController.text.trim();
     final email = _emailController.text.trim();
@@ -79,7 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() => _isLoading = true);
 
-    final result = await ApiService.verifyLicense(licenseKey, email);
+    final result = await ApiService.verifyLicense(licenseKey, email, _deviceId!);
 
     if (result['success'] == true) {
       final prefs = await SharedPreferences.getInstance();
@@ -94,12 +101,11 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       _showSnackbar('✅ تم التحقق من الكود');
     } else {
-      _showSnackbar(result['message'] ?? '❌ كود غير صالح');
+      _showSnackbar(result['message'] ?? '❌ فشل التحقق');
       setState(() => _isLoading = false);
     }
   }
 
-  // الخطوة 2: تسجيل الدخول إلى Quotex
   Future<void> _loginToQuotex() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
@@ -521,7 +527,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildStep3(int remainingTarget) {
     return Row(
       children: [
-        // الجزء الأيسر: سجل الصفقات
         Expanded(
           flex: 1,
           child: Container(
@@ -644,7 +649,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-        // الجزء الأيمن: معلومات الحساب
         Expanded(
           flex: 2,
           child: Center(
