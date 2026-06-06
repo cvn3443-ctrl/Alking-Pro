@@ -10,6 +10,7 @@ dependencies:
     sdk: flutter
   http: ^1.1.0
   shared_preferences: ^2.2.0
+  device_info_plus: ^9.1.0  # للحصول على معرف الجهاز
 
 flutter:
   uses-material-design: true
