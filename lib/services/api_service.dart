@@ -1,58 +1,58 @@
-import 'package:quotex_api/quotex_api.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:math';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class ApiService {
-  static QuotexAPI? _client;
-  static String? _currentAsset;
-  static List<String> _cachedAssets = [];
+  static const String baseUrl = 'https://vgkmvf.pythonanywhere.com';
 
-  // تسجيل الدخول إلى Quotex
-  static Future<Map<String, dynamic>> loginToQuotex(String email, String password) async {
+  // ============= التحقق من كود التفعيل =============
+  static Future<Map<String, dynamic>> verifyLicense(
+    String licenseKey,
+    String email,
+    String deviceId,
+  ) async {
     try {
-      _client = QuotexAPI(email: email, password: password);
-      bool connected = await _client!.connect();
-      if (connected) {
-        // جلب العملات بعد تسجيل الدخول
-        await fetchAssets();
-        return {'success': true, 'message': 'تم تسجيل الدخول بنجاح'};
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/verify_license'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'license_key': licenseKey,
+          'email': email,
+          'device_id': deviceId,
+        }),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
       }
-      return {'success': false, 'message': 'فشل الاتصال بـ Quotex'};
+      return {'success': false, 'message': 'فشل الاتصال'};
     } catch (e) {
-      return {'success': false, 'message': 'خطأ: $e'};
+      return {'success': false, 'message': 'خطأ في الاتصال'};
     }
   }
 
-  // جلب العملات من المنصة
-  static Future<List<String>> fetchAssets() async {
-    if (_client == null) return _cachedAssets;
-    try {
-      final assets = await _client!.getAssets();
-      _cachedAssets = assets;
-      return assets;
-    } catch (e) {
-      if (_cachedAssets.isEmpty) {
-        return ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'BTC/USD', 'ETH/USD'];
-      }
-      return _cachedAssets;
-    }
+  // ============= تسجيل الدخول (محاكاة) =============
+  static Future<Map<String, dynamic>> loginToQuotex(
+    String email,
+    String password,
+    String license,
+  ) async {
+    await Future.delayed(const Duration(seconds: 1));
+    return {'success': true, 'message': 'تم تسجيل الدخول بنجاح'};
   }
 
-  // جلب بيانات الشموع للتحليل
-  static Future<List<double>> getCandles(String asset, int count) async {
-    if (_client == null) return [];
-    try {
-      return await _client!.getCandles(asset, count);
-    } catch (e) {
-      // توليد بيانات وهمية في حالة الخطأ
-      return List.generate(count, (i) => 1.0 + Random().nextDouble() * 0.1);
-    }
+  // ============= جلب العملات (قائمة ثابتة) =============
+  static Future<List<String>> getAssets(String licenseKey) async {
+    return [
+      'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD',
+      'NZD/USD', 'USD/CHF', 'BTC/USD', 'ETH/USD', 'XAU/USD',
+      'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'EUR/AUD'
+    ];
   }
 
-  // تحليل السوق (RSI + MACD + BB)
-  static Future<Map<String, dynamic>> analyzeMarket(String asset) async {
-    final prices = await getCandles(asset, 100);
-    if (prices.length < 50) return {'signal': 'HOLD', 'confidence': 0};
+  // ============= تحليل السوق (RSI + MACD + BB) =============
+  static Future<Map<String, dynamic>> analyzeMarket(List<double> prices) {
+    if (prices.length < 50) {
+      return Future.value({'signal': 'HOLD', 'confidence': 0});
+    }
     
     // حساب RSI
     double rsi = _calculateRSI(prices);
@@ -69,56 +69,35 @@ class ApiService {
     
     // إشارة شراء قوية (4 شروط)
     if (rsi < 25 && macdBullish && atLower) {
-      return {'signal': 'BUY', 'confidence': 85};
+      return Future.value({'signal': 'BUY', 'confidence': 85});
     }
     // إشارة بيع قوية (4 شروط)
     if (rsi > 75 && macdBearish && atUpper) {
-      return {'signal': 'SELL', 'confidence': 85};
+      return Future.value({'signal': 'SELL', 'confidence': 85});
     }
     // إشارة شراء متوسطة
     if (rsi < 30 && macdBullish) {
-      return {'signal': 'BUY', 'confidence': 70};
+      return Future.value({'signal': 'BUY', 'confidence': 70});
     }
     // إشارة بيع متوسطة
     if (rsi > 70 && macdBearish) {
-      return {'signal': 'SELL', 'confidence': 70};
+      return Future.value({'signal': 'SELL', 'confidence': 70});
     }
-    return {'signal': 'HOLD', 'confidence': 0};
+    return Future.value({'signal': 'HOLD', 'confidence': 0});
   }
 
-  // تنفيذ صفقة شراء
-  static Future<bool> buy(String asset, double amount, int durationMinutes) async {
-    if (_client == null) return false;
-    try {
-      int durationSeconds = durationMinutes * 60;
-      return await _client!.buy(amount, asset, durationSeconds);
-    } catch (e) {
-      return false;
+  // جلب بيانات الشموع من WebView (سيتم تنفيذها في home_screen)
+  static List<double> parseCandlesFromPriceHistory(List<dynamic> candles) {
+    List<double> prices = [];
+    for (var candle in candles) {
+      if (candle['close'] != null) {
+        prices.add(candle['close'].toDouble());
+      }
     }
+    return prices;
   }
 
-  // تنفيذ صفقة بيع
-  static Future<bool> sell(String asset, double amount, int durationMinutes) async {
-    if (_client == null) return false;
-    try {
-      int durationSeconds = durationMinutes * 60;
-      return await _client!.sell(amount, asset, durationSeconds);
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // الحصول على الرصيد
-  static Future<double> getBalance() async {
-    if (_client == null) return 0;
-    try {
-      return await _client!.getBalance();
-    } catch (e) {
-      return 0;
-    }
-  }
-
-  // ============= دوال التحليل الفني (RSI, MACD, BB) =============
+  // ============= دوال التحليل الفني =============
   
   static double _calculateRSI(List<double> prices, {int period = 14}) {
     if (prices.length < period + 1) return 50;
@@ -167,8 +146,8 @@ class ApiService {
     if (prices.length < period) return {'atLower': false, 'atUpper': false};
     
     double sma = prices.sublist(prices.length - period).reduce((a, b) => a + b) / period;
-    double variance = prices.sublist(prices.length - period).map((p) => pow(p - sma, 2)).reduce((a, b) => a + b) / period;
-    double std = sqrt(variance);
+    double variance = prices.sublist(prices.length - period).map((p) => (p - sma) * (p - sma)).reduce((a, b) => a + b) / period;
+    double std = variance.sqrt();
     double lowerBand = sma - (stdDev * std);
     double upperBand = sma + (stdDev * std);
     
