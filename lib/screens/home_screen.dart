@@ -57,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _initWebView() {
+    // نسخة متوافقة مع الإصدارات القديمة
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..loadRequest(Uri.parse('https://qxbroker.com'));
@@ -132,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() => _isLoading = true);
 
-    final result = await ApiService.loginToQuotex(email, password);
+    final result = await ApiService.loginToQuotex(email, password, _currentLicense!);
 
     if (result['success'] == true) {
       setState(() {
@@ -240,7 +241,6 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {});
       
       if (_completedTrades < _targetTrades && _botActive) {
-        // ⏰ انتظار عشوائي بين 3 و 5 دقائق
         int waitMinutes = 3 + (DateTime.now().second % 3);
         int waitSeconds = waitMinutes * 60;
         
@@ -552,7 +552,6 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.all(12.0),
       child: Column(
         children: [
-          // بطاقة الإحصائيات
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -617,7 +616,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          // سجل الصفقات
           Row(
             children: [
               const Icon(Icons.history, size: 20),
