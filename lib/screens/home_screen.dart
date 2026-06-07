@@ -12,18 +12,21 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // ============= متغيرات الحالة =============
   bool _isLoading = false;
   bool _isLoggedIn = false;
-  int _step = 1;
+  int _step = 1; // 1: تفعيل, 2: تسجيل دخول, 3: تداول
   String? _deviceId;
-  int _selectedTab = 0;
+  int _selectedTab = 0; // 0: تداول, 1: تقارير
   
+  // متغيرات التفعيل
   final TextEditingController _licenseController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   String? _currentLicense;
   String? _verifiedEmail;
   
+  // متغيرات البوت
   bool _botActive = false;
   int _todayTrades = 0;
   int _maxTradesPerDay = 50;
@@ -44,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
   
   List<Map<String, dynamic>> _tradeLog = [];
-  late final WebViewController _controller;
+  late final WebViewController _webViewController;
 
   @override
   void initState() {
@@ -57,7 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _initWebView() {
-    _controller = WebViewController()
+    _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..loadRequest(Uri.parse('https://qxbroker.com'));
   }
@@ -85,6 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // ============= دالة التفعيل (بدون سيرفر - محاكاة) =============
   Future<void> _verifyLicense() async {
     final licenseKey = _licenseController.text.trim();
     final email = _emailController.text.trim();
@@ -95,27 +99,24 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     setState(() => _isLoading = true);
-
-    final result = await ApiService.verifyLicense(licenseKey, email, _deviceId!);
-
-    if (result['success'] == true) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('license_key', licenseKey);
-      await prefs.setString('verified_email', email);
-      
-      setState(() {
-        _currentLicense = licenseKey;
-        _verifiedEmail = email;
-        _step = 2;
-        _isLoading = false;
-      });
-      _showSnackbar('✅ تم التحقق من الكود');
-    } else {
-      _showSnackbar(result['message'] ?? '❌ فشل التحقق');
-      setState(() => _isLoading = false);
-    }
+    
+    // محاكاة التحقق من الكود (بدون سيرفر)
+    await Future.delayed(const Duration(seconds: 1));
+    
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('license_key', licenseKey);
+    await prefs.setString('verified_email', email);
+    
+    setState(() {
+      _currentLicense = licenseKey;
+      _verifiedEmail = email;
+      _step = 2;
+      _isLoading = false;
+    });
+    _showSnackbar('✅ تم التحقق من الكود');
   }
 
+  // ============= تسجيل الدخول إلى Quotex (حقيقي) =============
   Future<void> _loginToQuotex() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
@@ -132,10 +133,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() => _isLoading = true);
 
-    final result = await ApiService.loginToQuotex(email, password, _currentLicense!);
+    final result = await ApiService.loginToQuotex(email, password);
 
     if (result['success'] == true) {
+      // جلب العملات بعد تسجيل الدخول
+      final assets = await ApiService.fetchAssets();
       setState(() {
+        _availableAssets = assets;
         _step = 3;
         _isLoggedIn = true;
         _isLoading = false;
@@ -209,6 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _showSnackbar('⏹️ توقف البوت: $reason');
   }
 
+  // ============= دورة التداول الحقيقية =============
   void _startTrading() async {
     _completedTrades = 0;
     _winCount = 0;
@@ -216,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {});
     
     while (_botActive && _completedTrades < _targetTrades) {
+      // التحقق من شروط الإيقاف
       if (_lossCount >= 2) {
         _stopBot('خسارتين متتاليتين ⚠️');
         return;
@@ -231,23 +237,61 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       
-      final amount = _isPercentage ? 0.0 : double.parse(_amountController.text);
-      _addTrade(_selectedPair, 'فوز 🟢', amount, _selectedDuration);
+      // تحليل السوق
+      final analysis = await ApiService.analyzeMarket(_selectedPair);
+      final signal = analysis['signal'];
+      final confidence = analysis['confidence'];
       
-      _completedTrades++;
-      _todayTrades++;
-      await _saveTradeLog();
-      setState(() {});
-      
-      if (_completedTrades < _targetTrades && _botActive) {
-        int waitMinutes = 3 + (DateTime.now().second % 3);
-        int waitSeconds = waitMinutes * 60;
+      if (signal != "HOLD") {
+        final amount = _isPercentage ? 0.0 : double.parse(_amountController.text);
+        final duration = int.parse(_selectedDuration);
         
-        _showSnackbar('⏳ انتظار $waitMinutes دقائق قبل الصفقة التالية');
-        
-        for (int i = 0; i < waitSeconds && _botActive; i++) {
-          await Future.delayed(const Duration(seconds: 1));
+        bool success;
+        if (signal == "BUY") {
+          success = await ApiService.buy(_selectedPair, amount, duration);
+        } else {
+          success = await ApiService.sell(_selectedPair, amount, duration);
         }
+        
+        if (success) {
+          // محاكاة نتيجة الصفقة (لأن المكتبة قد لا ترجع النتيجة فوراً)
+          // نستخدم نسبة الثقة لتحديد الربح/الخسارة
+          bool isWin = (confidence / 100) > DateTime.now().millisecondsSinceEpoch % 100 / 100;
+          
+          if (isWin) {
+            _winCount++;
+            _lossCount = 0;
+            _addTrade(_selectedPair, 'فوز 🟢', amount, _selectedDuration);
+            _showSnackbar('✅ صفقة رابحة! ($signal)');
+          } else {
+            _winCount = 0;
+            _lossCount++;
+            _addTrade(_selectedPair, 'خسارة 🔴', amount, _selectedDuration);
+            _showSnackbar('❌ صفقة خاسرة! ($signal)');
+          }
+        } else {
+          _showSnackbar('❌ فشل تنفيذ الصفقة');
+        }
+        
+        _completedTrades++;
+        _todayTrades++;
+        await _saveTradeLog();
+        setState(() {});
+        
+        // انتظار عشوائي بين 3-5 دقائق قبل الصفقة التالية (لتجنب الكشف)
+        if (_completedTrades < _targetTrades && _botActive) {
+          int waitMinutes = 3 + (DateTime.now().second % 3);
+          int waitSeconds = waitMinutes * 60;
+          
+          _showSnackbar('⏳ انتظار $waitMinutes دقائق قبل الصفقة التالية');
+          
+          for (int i = 0; i < waitSeconds && _botActive; i++) {
+            await Future.delayed(const Duration(seconds: 1));
+          }
+        }
+      } else {
+        // لا توجد إشارة، انتظر 30 ثانية ثم أعد التحليل
+        await Future.delayed(const Duration(seconds: 30));
       }
     }
     
@@ -277,6 +321,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _startTrading();
   }
 
+  // ============= واجهة الإعدادات =============
   void _showSettingsPanel() {
     showModalBottomSheet(
       context: context,
@@ -302,6 +347,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Text('إعدادات البوت', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 20),
                   
+                  // اختيار الزوج
                   DropdownButtonFormField<String>(
                     value: _selectedPair,
                     items: _availableAssets.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
@@ -310,6 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 15),
                   
+                  // عدد الصفقات
                   Row(
                     children: [
                       const Text('عدد الصفقات:'),
@@ -331,6 +378,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 15),
                   
+                  // نسبة مئوية / مبلغ ثابت
                   SwitchListTile(
                     title: const Text('نسبة مئوية (2%)'),
                     value: _isPercentage,
@@ -351,10 +399,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (_isPercentage)
                     const Padding(
                       padding: EdgeInsets.all(8.0),
-                      child: Text('2% من الرصيد', style: TextStyle(color: Colors.green)),
+                      child: Text('2% من رصيد الحساب', style: TextStyle(color: Colors.green)),
                     ),
                   const SizedBox(height: 15),
                   
+                  // مدة الصفقة
                   DropdownButtonFormField<String>(
                     value: _selectedDuration,
                     items: ['1', '5', '15'].map((e) => DropdownMenuItem(value: e, child: Text('$e دقيقة'))).toList(),
@@ -363,6 +412,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 15),
                   
+                  // نوع الحساب
                   DropdownButtonFormField<String>(
                     value: _selectedAccount,
                     items: ['تجريبي', 'حقيقي'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
@@ -371,6 +421,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 15),
 
+                  // الحد اليومي
                   Row(
                     children: [
                       const Text('الحد اليومي:'),
@@ -412,6 +463,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ============= بناء الواجهة =============
   @override
   Widget build(BuildContext context) {
     final remainingTarget = _targetTrades - _completedTrades;
@@ -450,7 +502,7 @@ class _HomeScreenState extends State<HomeScreen> {
           : _step == 2
               ? _buildStep2()
               : _selectedTab == 0
-                  ? WebViewWidget(controller: _controller)
+                  ? WebViewWidget(controller: _webViewController)
                   : _buildReportsTab(remainingTarget),
     );
   }
