@@ -1,6 +1,6 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:math';  // ✅ أضف هذا السطر لحل مشكلة sqrt
+import 'dart:math';
 
 class ApiService {
   static const String baseUrl = 'https://vgkmvf.pythonanywhere.com';
@@ -40,9 +40,14 @@ class ApiService {
     return {'success': true, 'message': 'تم تسجيل الدخول بنجاح'};
   }
 
-  // ============= جلب العملات (قائمة ثابتة) =============
+  // ============= جلب العملات (قائمة ثابتة + OTC) =============
   static Future<List<String>> getAssets(String licenseKey) async {
+    // عملات عادية + عملات OTC
     return [
+      // ⭐ عملات OTC (تداول 24/7)
+      'EUR/USD (OTC)', 'GBP/USD (OTC)', 'USD/JPY (OTC)', 'AUD/USD (OTC)',
+      'BTC/USD (OTC)', 'ETH/USD (OTC)', 'XAU/USD (OTC)',
+      // عملات عادية (تتوقف عطلة نهاية الأسبوع)
       'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD',
       'NZD/USD', 'USD/CHF', 'BTC/USD', 'ETH/USD', 'XAU/USD',
       'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'EUR/AUD'
@@ -55,40 +60,29 @@ class ApiService {
       return {'signal': 'HOLD', 'confidence': 0};
     }
     
-    // حساب RSI
     double rsi = _calculateRSI(prices);
-    
-    // حساب MACD
     var macd = _calculateMACD(prices);
-    bool macdBullish = macd['bullish'] ?? false;  // ✅ حل مشكلة null
-    bool macdBearish = macd['bearish'] ?? false;  // ✅ حل مشكلة null
-    
-    // حساب Bollinger Bands
+    bool macdBullish = macd['bullish'] ?? false;
+    bool macdBearish = macd['bearish'] ?? false;
     var bb = _calculateBollinger(prices);
-    bool atLower = bb['atLower'] ?? false;  // ✅ حل مشكلة null
-    bool atUpper = bb['atUpper'] ?? false;  // ✅ حل مشكلة null
+    bool atLower = bb['atLower'] ?? false;
+    bool atUpper = bb['atUpper'] ?? false;
     
-    // إشارة شراء قوية (4 شروط)
     if (rsi < 25 && macdBullish && atLower) {
       return {'signal': 'BUY', 'confidence': 85};
     }
-    // إشارة بيع قوية (4 شروط)
     if (rsi > 75 && macdBearish && atUpper) {
       return {'signal': 'SELL', 'confidence': 85};
     }
-    // إشارة شراء متوسطة
     if (rsi < 30 && macdBullish) {
       return {'signal': 'BUY', 'confidence': 70};
     }
-    // إشارة بيع متوسطة
     if (rsi > 70 && macdBearish) {
       return {'signal': 'SELL', 'confidence': 70};
     }
     return {'signal': 'HOLD', 'confidence': 0};
   }
 
-  // ============= دوال التحليل الفني =============
-  
   static double _calculateRSI(List<double> prices, {int period = 14}) {
     if (prices.length < period + 1) return 50;
     double gain = 0, loss = 0;
@@ -118,11 +112,9 @@ class ApiService {
     double emaFast = _ema(prices, fast);
     double emaSlow = _ema(prices, slow);
     double macdLine = emaFast - emaSlow;
-    
     double emaFastPrev = _ema(prices.sublist(0, prices.length - 1), fast);
     double emaSlowPrev = _ema(prices.sublist(0, prices.length - 1), slow);
     double macdPrev = emaFastPrev - emaSlowPrev;
-    
     double signalLine = _ema(prices, signal);
     double signalPrev = _ema(prices.sublist(0, prices.length - 1), signal);
     
@@ -137,7 +129,7 @@ class ApiService {
     
     double sma = prices.sublist(prices.length - period).reduce((a, b) => a + b) / period;
     double variance = prices.sublist(prices.length - period).map((p) => (p - sma) * (p - sma)).reduce((a, b) => a + b) / period;
-    double std = sqrt(variance);  // ✅ sqrt الآن تعمل بعد إضافة import 'dart:math'
+    double std = sqrt(variance);
     double lowerBand = sma - (stdDev * std);
     double upperBand = sma + (stdDev * std);
     
