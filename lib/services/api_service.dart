@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:math';  // ✅ أضف هذا السطر لحل مشكلة sqrt
 
 class ApiService {
   static const String baseUrl = 'https://vgkmvf.pythonanywhere.com';
@@ -49,9 +50,9 @@ class ApiService {
   }
 
   // ============= تحليل السوق (RSI + MACD + BB) =============
-  static Future<Map<String, dynamic>> analyzeMarket(List<double> prices) {
+  static Future<Map<String, dynamic>> analyzeMarket(List<double> prices) async {
     if (prices.length < 50) {
-      return Future.value({'signal': 'HOLD', 'confidence': 0});
+      return {'signal': 'HOLD', 'confidence': 0};
     }
     
     // حساب RSI
@@ -59,42 +60,31 @@ class ApiService {
     
     // حساب MACD
     var macd = _calculateMACD(prices);
-    bool macdBullish = macd['bullish'];
-    bool macdBearish = macd['bearish'];
+    bool macdBullish = macd['bullish'] ?? false;  // ✅ حل مشكلة null
+    bool macdBearish = macd['bearish'] ?? false;  // ✅ حل مشكلة null
     
     // حساب Bollinger Bands
     var bb = _calculateBollinger(prices);
-    bool atLower = bb['atLower'];
-    bool atUpper = bb['atUpper'];
+    bool atLower = bb['atLower'] ?? false;  // ✅ حل مشكلة null
+    bool atUpper = bb['atUpper'] ?? false;  // ✅ حل مشكلة null
     
     // إشارة شراء قوية (4 شروط)
     if (rsi < 25 && macdBullish && atLower) {
-      return Future.value({'signal': 'BUY', 'confidence': 85});
+      return {'signal': 'BUY', 'confidence': 85};
     }
     // إشارة بيع قوية (4 شروط)
     if (rsi > 75 && macdBearish && atUpper) {
-      return Future.value({'signal': 'SELL', 'confidence': 85});
+      return {'signal': 'SELL', 'confidence': 85};
     }
     // إشارة شراء متوسطة
     if (rsi < 30 && macdBullish) {
-      return Future.value({'signal': 'BUY', 'confidence': 70});
+      return {'signal': 'BUY', 'confidence': 70};
     }
     // إشارة بيع متوسطة
     if (rsi > 70 && macdBearish) {
-      return Future.value({'signal': 'SELL', 'confidence': 70});
+      return {'signal': 'SELL', 'confidence': 70};
     }
-    return Future.value({'signal': 'HOLD', 'confidence': 0});
-  }
-
-  // جلب بيانات الشموع من WebView (سيتم تنفيذها في home_screen)
-  static List<double> parseCandlesFromPriceHistory(List<dynamic> candles) {
-    List<double> prices = [];
-    for (var candle in candles) {
-      if (candle['close'] != null) {
-        prices.add(candle['close'].toDouble());
-      }
-    }
-    return prices;
+    return {'signal': 'HOLD', 'confidence': 0};
   }
 
   // ============= دوال التحليل الفني =============
@@ -147,7 +137,7 @@ class ApiService {
     
     double sma = prices.sublist(prices.length - period).reduce((a, b) => a + b) / period;
     double variance = prices.sublist(prices.length - period).map((p) => (p - sma) * (p - sma)).reduce((a, b) => a + b) / period;
-    double std = variance.sqrt();
+    double std = sqrt(variance);  // ✅ sqrt الآن تعمل بعد إضافة import 'dart:math'
     double lowerBand = sma - (stdDev * std);
     double upperBand = sma + (stdDev * std);
     
