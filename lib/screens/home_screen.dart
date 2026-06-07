@@ -44,20 +44,20 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
   
   List<Map<String, dynamic>> _tradeLog = [];
-  late WebViewController _webViewController;
+  late final WebViewController _controller;
 
   @override
   void initState() {
     super.initState();
+    _initWebView();
     _loadSettings();
     _loadTradeLog();
     _getDeviceId();
     _checkSavedState();
-    _initWebView();
   }
 
   void _initWebView() {
-    _webViewController = WebViewController()
+    _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..loadRequest(Uri.parse('https://qxbroker.com'));
   }
@@ -450,7 +450,7 @@ class _HomeScreenState extends State<HomeScreen> {
           : _step == 2
               ? _buildStep2()
               : _selectedTab == 0
-                  ? WebViewWidget(controller: _webViewController)
+                  ? WebViewWidget(controller: _controller)
                   : _buildReportsTab(remainingTarget),
     );
   }
