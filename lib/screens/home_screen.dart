@@ -57,9 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _initWebView() {
-    // نسخة متوافقة مع الإصدارات القديمة
     _webViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..loadRequest(Uri.parse('https://qxbroker.com'));
   }
 
