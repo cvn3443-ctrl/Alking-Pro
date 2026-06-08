@@ -1,10 +1,11 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:math';
 
 class ApiService {
   static const String baseUrl = 'http://127.0.0.1:5000';
 
-  // تسجيل الدخول
+  // تسجيل الدخول إلى السيرفر
   static Future<Map<String, dynamic>> login(String email, String password) async {
     try {
       final response = await http.post(
