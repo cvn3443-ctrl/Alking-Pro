@@ -4,6 +4,7 @@ import 'dart:convert';
 class ApiService {
   static const String baseUrl = 'http://127.0.0.1:5000';
 
+  // تسجيل الدخول
   static Future<Map<String, dynamic>> login(String email, String password) async {
     try {
       final response = await http.post(
@@ -20,10 +21,12 @@ class ApiService {
     }
   }
 
+  // بدء التداول
   static Future<Map<String, dynamic>> startTrading({
     required String pair,
     required double amount,
     required int duration,
+    required String accountType,
     required int targetTrades,
     required int maxTradesPerDay,
   }) async {
@@ -35,6 +38,7 @@ class ApiService {
           'pair': pair,
           'amount': amount,
           'duration': duration,
+          'account_type': accountType,
           'target_trades': targetTrades,
           'max_trades_per_day': maxTradesPerDay,
         }),
@@ -48,6 +52,7 @@ class ApiService {
     }
   }
 
+  // إيقاف التداول
   static Future<Map<String, dynamic>> stopTrading() async {
     try {
       final response = await http.post(Uri.parse('$baseUrl/stop'));
@@ -60,28 +65,32 @@ class ApiService {
     }
   }
 
+  // جلب حالة البوت
   static Future<Map<String, dynamic>> getStatus() async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/status'));
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
-      return {'active': false};
+      return {'active': false, 'total_trades': 0, 'win_streak': 0, 'loss_streak': 0};
     } catch (e) {
-      return {'active': false};
+      return {'active': false, 'total_trades': 0, 'win_streak': 0, 'loss_streak': 0};
     }
   }
 
+  // جلب العملات أون لاين
   static Future<List<String>> getAssets() async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/assets'));
-      final data = jsonDecode(response.body);
-      if (data['assets'] != null) {
-        return List<String>.from(data['assets']);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['assets'] != null && data['assets'].isNotEmpty) {
+          return List<String>.from(data['assets']);
+        }
       }
-      return ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'BTC/USD'];
+      return ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'BTC/USD', 'ETH/USD', 'XAU/USD'];
     } catch (e) {
-      return ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'BTC/USD'];
+      return ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'BTC/USD', 'ETH/USD', 'XAU/USD'];
     }
   }
 }
