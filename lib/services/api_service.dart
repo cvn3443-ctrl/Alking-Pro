@@ -2,8 +2,10 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class ApiService {
-  static const String baseUrl = 'http://127.0.0.1:5000';
+  // 🔥 الرابط السحري الذي يعمل على أي هاتف Android
+  static const String baseUrl = 'http://10.0.2.2:5000';
 
+  // 1. تسجيل الدخول
   static Future<Map<String, dynamic>> login(String email, String password) async {
     try {
       print('🌐 محاولة الاتصال بـ: $baseUrl');
@@ -27,6 +29,7 @@ class ApiService {
     }
   }
 
+  // 2. بدء التداول
   static Future<Map<String, dynamic>> startTrading({
     required String pair,
     required double amount,
@@ -55,6 +58,7 @@ class ApiService {
     }
   }
 
+  // 3. إيقاف التداول
   static Future<Map<String, dynamic>> stopTrading() async {
     try {
       final response = await http.post(Uri.parse('$baseUrl/stop'));
@@ -67,6 +71,7 @@ class ApiService {
     }
   }
 
+  // 4. جلب حالة البوت
   static Future<Map<String, dynamic>> getStatus() async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/status'));
@@ -79,6 +84,7 @@ class ApiService {
     }
   }
 
+  // 5. جلب العملات المتاحة
   static Future<List<String>> getAssets() async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/assets'));
