@@ -1,138 +1,91 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:math';
 
 class ApiService {
-  static const String baseUrl = 'https://vgkmvf.pythonanywhere.com';
+  // رابط السيرفر المحلي على Termux
+  static const String baseUrl = 'http://127.0.0.1:5000';
 
-  // ============= التحقق من كود التفعيل =============
-  static Future<Map<String, dynamic>> verifyLicense(
-    String licenseKey,
-    String email,
-    String deviceId,
-  ) async {
+  // 1. تسجيل الدخول إلى Quotex عبر السيرفر
+  static Future<Map<String, dynamic>> login(String email, String password) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/verify_license'),
+        Uri.parse('$baseUrl/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email, 'password': password}),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'status': 'error', 'message': 'فشل الاتصال بالسيرفر'};
+    } catch (e) {
+      return {'status': 'error', 'message': 'خطأ في الاتصال: $e'};
+    }
+  }
+
+  // 2. بدء التداول (إرسال الإعدادات إلى السيرفر)
+  static Future<Map<String, dynamic>> startTrading({
+    required String pair,
+    required double amount,
+    required int duration,
+    required int targetTrades,
+    required int maxTradesPerDay,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/start'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'license_key': licenseKey,
-          'email': email,
-          'device_id': deviceId,
+          'pair': pair,
+          'amount': amount,
+          'duration': duration,
+          'target_trades': targetTrades,
+          'max_trades_per_day': maxTradesPerDay,
         }),
       );
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
-      return {'success': false, 'message': 'فشل الاتصال'};
+      return {'status': 'error', 'message': 'فشل بدء التداول'};
     } catch (e) {
-      return {'success': false, 'message': 'خطأ في الاتصال'};
+      return {'status': 'error', 'message': 'خطأ في الاتصال: $e'};
     }
   }
 
-  // ============= تسجيل الدخول (محاكاة) =============
-  static Future<Map<String, dynamic>> loginToQuotex(
-    String email,
-    String password,
-    String license,
-  ) async {
-    await Future.delayed(const Duration(seconds: 1));
-    return {'success': true, 'message': 'تم تسجيل الدخول بنجاح'};
-  }
-
-  // ============= جلب العملات (قائمة ثابتة + OTC) =============
-  static Future<List<String>> getAssets(String licenseKey) async {
-    // عملات عادية + عملات OTC
-    return [
-      // ⭐ عملات OTC (تداول 24/7)
-      'EUR/USD (OTC)', 'GBP/USD (OTC)', 'USD/JPY (OTC)', 'AUD/USD (OTC)',
-      'BTC/USD (OTC)', 'ETH/USD (OTC)', 'XAU/USD (OTC)',
-      // عملات عادية (تتوقف عطلة نهاية الأسبوع)
-      'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD',
-      'NZD/USD', 'USD/CHF', 'BTC/USD', 'ETH/USD', 'XAU/USD',
-      'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'EUR/AUD'
-    ];
-  }
-
-  // ============= تحليل السوق (RSI + MACD + BB) =============
-  static Future<Map<String, dynamic>> analyzeMarket(List<double> prices) async {
-    if (prices.length < 50) {
-      return {'signal': 'HOLD', 'confidence': 0};
-    }
-    
-    double rsi = _calculateRSI(prices);
-    var macd = _calculateMACD(prices);
-    bool macdBullish = macd['bullish'] ?? false;
-    bool macdBearish = macd['bearish'] ?? false;
-    var bb = _calculateBollinger(prices);
-    bool atLower = bb['atLower'] ?? false;
-    bool atUpper = bb['atUpper'] ?? false;
-    
-    if (rsi < 25 && macdBullish && atLower) {
-      return {'signal': 'BUY', 'confidence': 85};
-    }
-    if (rsi > 75 && macdBearish && atUpper) {
-      return {'signal': 'SELL', 'confidence': 85};
-    }
-    if (rsi < 30 && macdBullish) {
-      return {'signal': 'BUY', 'confidence': 70};
-    }
-    if (rsi > 70 && macdBearish) {
-      return {'signal': 'SELL', 'confidence': 70};
-    }
-    return {'signal': 'HOLD', 'confidence': 0};
-  }
-
-  static double _calculateRSI(List<double> prices, {int period = 14}) {
-    if (prices.length < period + 1) return 50;
-    double gain = 0, loss = 0;
-    for (int i = prices.length - period; i < prices.length; i++) {
-      double change = prices[i] - prices[i - 1];
-      if (change > 0) gain += change;
-      else loss -= change;
-    }
-    if (loss == 0) return 100;
-    double rs = gain / loss;
-    return 100 - (100 / (1 + rs));
-  }
-
-  static Map<String, bool> _calculateMACD(List<double> prices, {int fast = 12, int slow = 26, int signal = 9}) {
-    if (prices.length < slow) return {'bullish': false, 'bearish': false};
-    
-    double _ema(List<double> data, int period) {
-      if (data.length < period) return data.last;
-      double multiplier = 2 / (period + 1);
-      double ema = data.sublist(0, period).reduce((a, b) => a + b) / period;
-      for (int i = period; i < data.length; i++) {
-        ema = (data[i] - ema) * multiplier + ema;
+  // 3. إيقاف التداول
+  static Future<Map<String, dynamic>> stopTrading() async {
+    try {
+      final response = await http.post(Uri.parse('$baseUrl/stop'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
       }
-      return ema;
+      return {'status': 'error', 'message': 'فشل إيقاف التداول'};
+    } catch (e) {
+      return {'status': 'error', 'message': 'خطأ في الاتصال: $e'};
     }
-    
-    double emaFast = _ema(prices, fast);
-    double emaSlow = _ema(prices, slow);
-    double macdLine = emaFast - emaSlow;
-    double emaFastPrev = _ema(prices.sublist(0, prices.length - 1), fast);
-    double emaSlowPrev = _ema(prices.sublist(0, prices.length - 1), slow);
-    double macdPrev = emaFastPrev - emaSlowPrev;
-    double signalLine = _ema(prices, signal);
-    double signalPrev = _ema(prices.sublist(0, prices.length - 1), signal);
-    
-    bool bullish = macdLine > signalLine && macdPrev <= signalPrev;
-    bool bearish = macdLine < signalLine && macdPrev >= signalPrev;
-    
-    return {'bullish': bullish, 'bearish': bearish};
   }
 
-  static Map<String, bool> _calculateBollinger(List<double> prices, {int period = 20, double stdDev = 2.0}) {
-    if (prices.length < period) return {'atLower': false, 'atUpper': false};
-    
-    double sma = prices.sublist(prices.length - period).reduce((a, b) => a + b) / period;
-    double variance = prices.sublist(prices.length - period).map((p) => (p - sma) * (p - sma)).reduce((a, b) => a + b) / period;
-    double std = sqrt(variance);
-    double lowerBand = sma - (stdDev * std);
-    double upperBand = sma + (stdDev * std);
-    
-    return {'atLower': prices.last <= lowerBand, 'atUpper': prices.last >= upperBand};
+  // 4. جلب حالة البوت (نشط/غير نشط، إحصائيات)
+  static Future<Map<String, dynamic>> getStatus() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/status'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'active': false};
+    } catch (e) {
+      return {'active': false};
+    }
+  }
+
+  // 5. جلب قائمة العملات المتاحة من السيرفر
+  static Future<List<String>> getAssets() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/assets'));
+      final data = jsonDecode(response.body);
+      return List<String>.from(data['assets']);
+    } catch (e) {
+      // قائمة افتراضية في حال فشل الاتصال
+      return ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'BTC/USD'];
+    }
   }
 }
