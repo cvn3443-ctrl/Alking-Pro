@@ -3,6 +3,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import 'dart:async';
+import 'dart:convert';  // ✅ أضف هذا السطر
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -132,7 +133,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final prefs = await SharedPreferences.getInstance();
     final int? savedTrades = prefs.getInt('todayTrades');
     setState(() => _todayTrades = savedTrades ?? 0);
-    // تحميل سجل الصفقات من SharedPreferences (مبسط)
     final String? logString = prefs.getString('tradeLog');
     if (logString != null) {
       try {
@@ -185,7 +185,6 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       if (result['status'] == 'started') {
         _showSnackbar('🚀 تم تشغيل البوت');
-        // إضافة صفقة تجريبية فورية (لاختبار واجهة المستخدم)
         _addTrade(_selectedPair, 'صفقة اختبار (محاكاة)', amount, _selectedDuration);
       } else {
         _showSnackbar('❌ فشل تشغيل البوت: ${result['message']}');
