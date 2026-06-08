@@ -2,34 +2,24 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class ApiService {
-  // 🔥 الرابط السحري الذي يعمل على أي هاتف Android
-  static const String baseUrl = 'http://10.0.2.2:5000';
+  static const String baseUrl = 'http://127.0.0.1:5000';
 
-  // 1. تسجيل الدخول
   static Future<Map<String, dynamic>> login(String email, String password) async {
     try {
-      print('🌐 محاولة الاتصال بـ: $baseUrl');
-      print('📧 الإيميل: $email');
-      
       final response = await http.post(
         Uri.parse('$baseUrl/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'password': password}),
       );
-      
-      print('✅ الرد من السيرفر: ${response.statusCode}');
-      
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
       return {'status': 'error', 'message': 'فشل الاتصال بالسيرفر'};
     } catch (e) {
-      print('❌ خطأ في الاتصال: $e');
       return {'status': 'error', 'message': 'خطأ في الاتصال: $e'};
     }
   }
 
-  // 2. بدء التداول
   static Future<Map<String, dynamic>> startTrading({
     required String pair,
     required double amount,
@@ -58,7 +48,6 @@ class ApiService {
     }
   }
 
-  // 3. إيقاف التداول
   static Future<Map<String, dynamic>> stopTrading() async {
     try {
       final response = await http.post(Uri.parse('$baseUrl/stop'));
@@ -71,7 +60,6 @@ class ApiService {
     }
   }
 
-  // 4. جلب حالة البوت
   static Future<Map<String, dynamic>> getStatus() async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/status'));
@@ -84,12 +72,14 @@ class ApiService {
     }
   }
 
-  // 5. جلب العملات المتاحة
   static Future<List<String>> getAssets() async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/assets'));
       final data = jsonDecode(response.body);
-      return List<String>.from(data['assets']);
+      if (data['assets'] != null) {
+        return List<String>.from(data['assets']);
+      }
+      return ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'BTC/USD'];
     } catch (e) {
       return ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'BTC/USD'];
     }
