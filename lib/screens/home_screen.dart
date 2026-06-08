@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import 'dart:async';
-import 'dart:convert';  // ✅ أضف هذا السطر
+import 'dart:convert';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,7 +16,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoggedIn = false;
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  
+
   bool _botActive = false;
   int _winStreak = 0;
   int _lossStreak = 0;
@@ -25,69 +24,38 @@ class _HomeScreenState extends State<HomeScreen> {
   int _todayTrades = 0;
   int _maxTradesPerDay = 50;
   int _targetTrades = 5;
-  
+
   String _selectedPair = 'EUR/USD';
   final TextEditingController _amountController = TextEditingController(text: '10');
   String _selectedDuration = '5';
   String _selectedAccount = 'تجريبي';
   bool _isPercentage = false;
-  
-  List<String> _availableAssets = [];
+
+  List<String> _assetsList = [];
   List<Map<String, dynamic>> _tradeLog = [];
-  int _currentTab = 0;
-  late final WebViewController _webViewController;
   Timer? _statusTimer;
 
   @override
   void initState() {
     super.initState();
-    _initWebView();
     _loadSettings();
     _loadTradeLog();
-    _loadAssets();
     _checkSavedSession();
     _startStatusPolling();
-  }
-
-  void _initWebView() {
-    _webViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..loadRequest(Uri.parse('https://qxbroker.com'));
   }
 
   Future<void> _checkSavedSession() async {
     final prefs = await SharedPreferences.getInstance();
     final email = prefs.getString('quotex_email');
-    if (email != null) setState(() => _isLoggedIn = true);
-  }
-
-  Future<void> _login() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-    if (email.isEmpty || password.isEmpty) {
-      _showSnackbar('الرجاء إدخال البريد الإلكتروني وكلمة السر');
-      return;
-    }
-    setState(() => _isLoading = true);
-    final result = await ApiService.login(email, password);
-    if (result['status'] == 'success') {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('quotex_email', email);
-      setState(() {
-        _isLoggedIn = true;
-        _isLoading = false;
-      });
-      _showSnackbar('✅ تم تسجيل الدخول بنجاح');
-      await _loadAssets();
-    } else {
-      _showSnackbar(result['message'] ?? '❌ فشل تسجيل الدخول');
-      setState(() => _isLoading = false);
+    if (email != null) {
+      setState(() => _isLoggedIn = true);
+      await _fetchAssets();
     }
   }
 
-  Future<void> _loadAssets() async {
+  Future<void> _fetchAssets() async {
     final assets = await ApiService.getAssets();
-    setState(() => _availableAssets = assets);
+    setState(() => _assetsList = assets);
   }
 
   void _startStatusPolling() {
@@ -102,6 +70,35 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     });
+  }
+
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    if (email.isEmpty || password.isEmpty) {
+      _showSnackbar('الرجاء إدخال البريد الإلكتروني وكلمة السر');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    final result = await ApiService.login(email, password);
+    if (result['status'] == 'success') {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('quotex_email', email);
+      setState(() {
+        _isLoggedIn = true;
+        _isLoading = false;
+      });
+      _showSnackbar('✅ تم تسجيل الدخول بنجاح');
+      await _fetchAssets();
+    } else {
+      _showSnackbar(result['message'] ?? '❌ فشل تسجيل الدخول');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _showSnackbar(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   Future<void> _saveSettings() async {
@@ -161,15 +158,12 @@ class _HomeScreenState extends State<HomeScreen> {
     _saveTradeLog();
   }
 
-  void _showSnackbar(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
-
   void _toggleBot() async {
     if (!_isLoggedIn) {
       _showSnackbar('الرجاء تسجيل الدخول أولاً');
       return;
     }
+
     if (_botActive) {
       await ApiService.stopTrading();
       _showSnackbar('⏹️ تم إيقاف البوت');
@@ -185,7 +179,6 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       if (result['status'] == 'started') {
         _showSnackbar('🚀 تم تشغيل البوت');
-        _addTrade(_selectedPair, 'صفقة اختبار (محاكاة)', amount, _selectedDuration);
       } else {
         _showSnackbar('❌ فشل تشغيل البوت: ${result['message']}');
       }
@@ -212,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 20),
                 DropdownButtonFormField<String>(
                   value: _selectedPair,
-                  items: _availableAssets.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  items: _assetsList.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                   onChanged: (v) => setState(() => _selectedPair = v!),
                   decoration: const InputDecoration(labelText: 'الزوج'),
                 ),
@@ -313,26 +306,8 @@ class _HomeScreenState extends State<HomeScreen> {
           if (_isLoggedIn) IconButton(icon: const Icon(Icons.settings), onPressed: _showSettingsPanel),
         ],
       ),
-      body: _isLoggedIn
-          ? IndexedStack(
-              index: _currentTab,
-              children: [
-                WebViewWidget(controller: _webViewController),
-                _buildReportsTab(),
-              ],
-            )
-          : _buildLoginScreen(),
-      bottomNavigationBar: _isLoggedIn
-          ? BottomNavigationBar(
-              currentIndex: _currentTab,
-              onTap: (index) => setState(() => _currentTab = index),
-              items: const [
-                BottomNavigationBarItem(icon: Icon(Icons.trending_up), label: 'تداول'),
-                BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'التقارير'),
-              ],
-            )
-          : null,
-      floatingActionButton: _isLoggedIn && _currentTab == 1
+      body: _isLoggedIn ? _buildMainScreen() : _buildLoginScreen(),
+      floatingActionButton: _isLoggedIn
           ? FloatingActionButton(
               onPressed: _toggleBot,
               backgroundColor: _botActive ? Colors.red : Colors.green,
@@ -375,10 +350,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildReportsTab() {
-    final remainingTarget = _targetTrades - (_totalTrades % _targetTrades);
+  Widget _buildMainScreen() {
     return Padding(
-      padding: const EdgeInsets.all(12.0),
+      padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
           Card(
@@ -391,11 +365,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Divider(),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [const Text('صفقات اليوم:'), Text('$_todayTrades / $_maxTradesPerDay')]),
-                  if (_botActive) ...[
-                    const SizedBox(height: 5),
-                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [const Text('المتبقي:'), Text('$remainingTarget / $_targetTrades')]),
-                  ],
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.all(8),
@@ -424,6 +393,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   setState(() {
                     _tradeLog.clear();
                     _todayTrades = 0;
+                    _totalTrades = 0;
                   });
                   _saveTradeLog();
                 },
