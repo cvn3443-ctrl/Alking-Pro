@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../services/api_service.dart';
+import '../services/quotex_api.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -12,10 +13,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final QuotexAPI _api = QuotexAPI();
   bool _isLoading = false;
   bool _isLoggedIn = false;
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _ssidController = TextEditingController();
 
   bool _botActive = false;
   int _winStreak = 0;
@@ -33,66 +34,59 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<String> _assetsList = [];
   List<Map<String, dynamic>> _tradeLog = [];
+  int _currentTab = 0;
+  late final WebViewController _webViewController;
   Timer? _statusTimer;
 
   @override
   void initState() {
     super.initState();
+    _initWebView();
     _loadSettings();
     _loadTradeLog();
+    _loadAssets();
     _checkSavedSession();
-    _startStatusPolling();
+  }
+
+  void _initWebView() {
+    _webViewController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..loadRequest(Uri.parse('https://qxbroker.com'));
   }
 
   Future<void> _checkSavedSession() async {
     final prefs = await SharedPreferences.getInstance();
-    final email = prefs.getString('quotex_email');
-    if (email != null) {
+    final savedSsid = prefs.getString('quotex_ssid');
+    if (savedSsid != null) {
       setState(() => _isLoggedIn = true);
-      await _fetchAssets();
     }
   }
 
-  Future<void> _fetchAssets() async {
-    final assets = await ApiService.getAssets();
+  Future<void> _loadAssets() async {
+    final assets = await _api.getAssets();
     setState(() => _assetsList = assets);
   }
 
-  void _startStatusPolling() {
-    _statusTimer = Timer.periodic(Duration(seconds: 5), (timer) async {
-      if (_isLoggedIn) {
-        final status = await ApiService.getStatus();
-        setState(() {
-          _botActive = status['active'] ?? false;
-          _winStreak = status['win_streak'] ?? 0;
-          _lossStreak = status['loss_streak'] ?? 0;
-          _totalTrades = status['total_trades'] ?? 0;
-        });
-      }
-    });
-  }
-
   Future<void> _login() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-    if (email.isEmpty || password.isEmpty) {
-      _showSnackbar('الرجاء إدخال البريد الإلكتروني وكلمة السر');
+    final ssid = _ssidController.text.trim();
+    if (ssid.isEmpty) {
+      _showSnackbar('الرجاء إدخال SSID');
       return;
     }
 
     setState(() => _isLoading = true);
-    final result = await ApiService.login(email, password);
-    if (result['status'] == 'success') {
+    bool success = await _api.loginWithSSID(ssid);
+    if (success) {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('quotex_email', email);
+      await prefs.setString('quotex_ssid', ssid);
       setState(() {
         _isLoggedIn = true;
         _isLoading = false;
       });
       _showSnackbar('✅ تم تسجيل الدخول بنجاح');
-      await _fetchAssets();
+      await _loadAssets();
     } else {
-      _showSnackbar(result['message'] ?? '❌ فشل تسجيل الدخول');
+      _showSnackbar('❌ فشل تسجيل الدخول');
       setState(() => _isLoading = false);
     }
   }
@@ -158,30 +152,77 @@ class _HomeScreenState extends State<HomeScreen> {
     _saveTradeLog();
   }
 
-  void _toggleBot() async {
+  void _stopBot(String reason) {
+    setState(() {
+      _botActive = false;
+    });
+    _statusTimer?.cancel();
+    _showSnackbar('⏹️ توقف البوت: $reason');
+  }
+
+  void _startTrading() {
+    if (_todayTrades >= _maxTradesPerDay) {
+      _stopBot('تم الوصول للحد الأقصى اليومي');
+      return;
+    }
+
+    _winStreak = 0;
+    _lossStreak = 0;
+    _botActive = true;
+    _executeTrade();
+  }
+
+  void _executeTrade() async {
+    if (!_botActive) return;
+
+    // 🔥 تحليل بسيط (سنستبدله بـ RSI+MACD+BB لاحقاً)
+    bool isWin = DateTime.now().millisecondsSinceEpoch % 100 < 70;
+    double amount = _isPercentage ? 0.0 : double.parse(_amountController.text);
+
+    if (isWin) {
+      _winStreak++;
+      _lossStreak = 0;
+      _addTrade(_selectedPair, 'فوز 🟢', amount, _selectedDuration);
+      _showSnackbar('✅ صفقة رابحة! أرباح متتالية: $_winStreak');
+      if (_winStreak >= 8) {
+        _stopBot('8 أرباح متتالية 🏆');
+        return;
+      }
+    } else {
+      _winStreak = 0;
+      _lossStreak++;
+      _addTrade(_selectedPair, 'خسارة 🔴', amount, _selectedDuration);
+      _showSnackbar('❌ صفقة خاسرة! خسائر متتالية: $_lossStreak');
+      if (_lossStreak >= 2) {
+        _stopBot('خسارتين متتاليتين ⚠️');
+        return;
+      }
+    }
+
+    _totalTrades++;
+    _todayTrades++;
+    _saveTradeLog();
+    setState(() {});
+
+    if (_totalTrades >= _targetTrades) {
+      _stopBot('تم تحقيق الهدف 🎯');
+      return;
+    }
+
+    int waitSeconds = (3 + DateTime.now().second % 3) * 60;
+    Future.delayed(Duration(seconds: waitSeconds), _executeTrade);
+  }
+
+  void _toggleBot() {
     if (!_isLoggedIn) {
       _showSnackbar('الرجاء تسجيل الدخول أولاً');
       return;
     }
-
     if (_botActive) {
-      await ApiService.stopTrading();
-      _showSnackbar('⏹️ تم إيقاف البوت');
+      _stopBot('تم الإيقاف يدوياً');
     } else {
-      final double amount = _isPercentage ? 0.0 : double.parse(_amountController.text);
-      final result = await ApiService.startTrading(
-        pair: _selectedPair,
-        amount: amount,
-        duration: int.parse(_selectedDuration),
-        accountType: _selectedAccount,
-        targetTrades: _targetTrades,
-        maxTradesPerDay: _maxTradesPerDay,
-      );
-      if (result['status'] == 'started') {
-        _showSnackbar('🚀 تم تشغيل البوت');
-      } else {
-        _showSnackbar('❌ فشل تشغيل البوت: ${result['message']}');
-      }
+      _saveSettings();
+      _startTrading();
     }
   }
 
@@ -306,8 +347,26 @@ class _HomeScreenState extends State<HomeScreen> {
           if (_isLoggedIn) IconButton(icon: const Icon(Icons.settings), onPressed: _showSettingsPanel),
         ],
       ),
-      body: _isLoggedIn ? _buildMainScreen() : _buildLoginScreen(),
-      floatingActionButton: _isLoggedIn
+      body: _isLoggedIn
+          ? IndexedStack(
+              index: _currentTab,
+              children: [
+                WebViewWidget(controller: _webViewController),
+                _buildReportsTab(),
+              ],
+            )
+          : _buildLoginScreen(),
+      bottomNavigationBar: _isLoggedIn
+          ? BottomNavigationBar(
+              currentIndex: _currentTab,
+              onTap: (index) => setState(() => _currentTab = index),
+              items: const [
+                BottomNavigationBarItem(icon: Icon(Icons.trending_up), label: 'تداول'),
+                BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'التقارير'),
+              ],
+            )
+          : null,
+      floatingActionButton: _isLoggedIn && _currentTab == 1
           ? FloatingActionButton(
               onPressed: _toggleBot,
               backgroundColor: _botActive ? Colors.red : Colors.green,
@@ -324,19 +383,18 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.lock, size: 80, color: Colors.grey),
+            const Icon(Icons.vpn_key, size: 80, color: Colors.green),
             const SizedBox(height: 20),
-            const Text('تسجيل الدخول إلى Quotex', style: TextStyle(fontSize: 20)),
+            const Text('تسجيل الدخول باستخدام SSID', style: TextStyle(fontSize: 20)),
             const SizedBox(height: 20),
             TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(labelText: 'البريد الإلكتروني', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'كلمة السر', border: OutlineInputBorder()),
+              controller: _ssidController,
+              decoration: const InputDecoration(
+                labelText: 'SSID',
+                hintText: 'eyJpdiI6ImdyRXV3...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
             ),
             const SizedBox(height: 20),
             ElevatedButton.icon(
@@ -350,9 +408,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMainScreen() {
+  Widget _buildReportsTab() {
+    final remainingTarget = _targetTrades - (_totalTrades % _targetTrades);
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(12.0),
       child: Column(
         children: [
           Card(
@@ -365,6 +424,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Divider(),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [const Text('صفقات اليوم:'), Text('$_todayTrades / $_maxTradesPerDay')]),
+                  if (_botActive) ...[
+                    const SizedBox(height: 5),
+                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [const Text('المتبقي:'), Text('$remainingTarget / $_targetTrades')]),
+                  ],
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.all(8),
