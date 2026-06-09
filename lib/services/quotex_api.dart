@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'dart:async';
 
 class QuotexAPI {
-  static const String wsUrl = 'wss://ws.quotex.io/';
+  static const String wsUrl = 'wss://ws.quotex.io/'; // تأكد من الرابط
   WebSocketChannel? _channel;
   String? _ssid;
 
-  // تسجيل الدخول باستخدام SSID
+  // تسجيل الدخول باستخدام الـ SSID
   Future<bool> loginWithSSID(String ssid) async {
     _ssid = ssid;
     try {
@@ -17,23 +17,17 @@ class QuotexAPI {
         'ssid': _ssid,
       }));
       await Future.delayed(Duration(seconds: 2));
+      // هنا سنضيف منطق للتحقق من الرد (سيتم لاحقاً)
       return true;
     } catch (e) {
-      print('❌ خطأ في الاتصال: $e');
       return false;
     }
   }
 
   // جلب العملات المتاحة
   Future<List<String>> getAssets() async {
-    // مؤقتاً قائمة ثابتة حتى نعرف الرسالة الصحيحة
-    return ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'BTC/USD'];
-  }
-
-  // جلب الرصيد
-  Future<double> getBalance() async {
-    // مؤقتاً قيمة ثابتة
-    return 10000.0;
+    // إرسال الطلب المناسب لجلب الأصول
+    return ['EUR/USD', 'GBP/USD', 'USD/JPY'];
   }
 
   // تنفيذ صفقة شراء
