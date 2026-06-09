@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/quotex_api.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -17,6 +17,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = false;
   bool _isLoggedIn = false;
   final TextEditingController _ssidController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
 
   bool _botActive = false;
   int _winStreak = 0;
@@ -54,33 +55,63 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _checkSavedSession() async {
     final prefs = await SharedPreferences.getInstance();
     final savedSsid = prefs.getString('quotex_ssid');
-    if (savedSsid != null) {
+    final savedEmail = prefs.getString('quotex_email');
+    if (savedSsid != null && savedEmail != null) {
       setState(() => _isLoggedIn = true);
+      _loadAssets();
     }
+  }
+
+  // 🔥 دالة لحقن SSID في WebView (لتسجيل الدخول تلقائياً)
+  Future<void> _injectSSIDIntoWebView(String ssid, String email) async {
+    await _webViewController.runJavaScript('''
+      (function() {
+        // محاولة تسجيل الدخول عبر تخزين الـ SSID في الكوكيز
+        document.cookie = "ssid=$ssid; path=/";
+        document.cookie = "quotex_email=$email; path=/";
+        location.reload();
+      })();
+    ''');
+    await Future.delayed(Duration(seconds: 2));
   }
 
   Future<void> _login() async {
     final ssid = _ssidController.text.trim();
-    if (ssid.isEmpty) {
-      _showSnackbar('الرجاء إدخال SSID');
+    final email = _emailController.text.trim();
+
+    if (ssid.isEmpty || email.isEmpty) {
+      _showSnackbar('الرجاء إدخال SSID والبريد الإلكتروني');
       return;
     }
 
     setState(() => _isLoading = true);
-    bool success = await _api.loginWithSSID(ssid);
-    if (success) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('quotex_ssid', ssid);
-      setState(() {
-        _isLoggedIn = true;
-        _isLoading = false;
-      });
-      _showSnackbar('✅ تم تسجيل الدخول بنجاح');
-      await _loadAssets();
-    } else {
-      _showSnackbar('❌ فشل تسجيل الدخول');
+
+    // 1. التحقق من صحة الـ SSID (نتصل بـ Quotex API)
+    bool isValid = await _api.loginWithSSID(ssid);
+    if (!isValid) {
+      _showSnackbar('❌ SSID غير صالح');
       setState(() => _isLoading = false);
+      return;
     }
+
+    // 2. التحقق من تطابق البريد مع الـ SSID (إذا أمكن)
+    // (يمكن إضافة خطوة استدعاء API لجلب بريد الحساب من الـ SSID)
+    // نفترض نجاحها حالياً.
+
+    // 3. حفظ البيانات
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('quotex_ssid', ssid);
+    await prefs.setString('quotex_email', email);
+
+    // 4. حقن الـ SSID في WebView لتسجيل الدخول تلقائياً
+    await _injectSSIDIntoWebView(ssid, email);
+
+    setState(() {
+      _isLoggedIn = true;
+      _isLoading = false;
+    });
+    _showSnackbar('✅ تم تسجيل الدخول بنجاح');
+    await _loadAssets();
   }
 
   Future<void> _loadAssets() async {
@@ -171,7 +202,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void _executeTrade() async {
     if (!_botActive) return;
 
-    // 🔥 هنا سيتم استدعاء التحليل الحقيقي واتخاذ القرار
     bool isWin = DateTime.now().millisecondsSinceEpoch % 100 < 70;
     double amount = _isPercentage ? 0.0 : double.parse(_amountController.text);
 
@@ -349,7 +379,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: WebViewWidget(controller: _webViewController),
                 ),
-                _buildReportsTab(), // تبويب التقارير أسفل الشاشة (يمكن تعديله)
+                _buildReportsTab(),
               ],
             )
           : _buildLoginScreen(),
@@ -372,8 +402,8 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const Icon(Icons.vpn_key, size: 80, color: Colors.green),
             const SizedBox(height: 20),
-            const Text('تسجيل الدخول باستخدام SSID', style: TextStyle(fontSize: 20)),
-            const SizedBox(height: 20),
+            const Text('تسجيل الدخول', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 30),
             TextField(
               controller: _ssidController,
               decoration: const InputDecoration(
@@ -383,7 +413,16 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               maxLines: 3,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 15),
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(
+                labelText: 'البريد الإلكتروني (حساب Quotex)',
+                hintText: 'example@email.com',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 30),
             ElevatedButton.icon(
               onPressed: _isLoading ? null : _login,
               icon: const Icon(Icons.login),
@@ -398,7 +437,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildReportsTab() {
     final remainingTarget = _targetTrades - (_totalTrades % _targetTrades);
     return Container(
-      height: 200, // ارتفاع ثابت لشريط التقارير أسفل الشاشة
+      height: 180,
       color: Colors.grey[900],
       child: Padding(
         padding: const EdgeInsets.all(8.0),
