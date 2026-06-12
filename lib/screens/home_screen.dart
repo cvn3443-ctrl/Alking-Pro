@@ -17,7 +17,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = false;
   bool _isLoggedIn = false;
   final TextEditingController _ssidController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
 
   bool _botActive = false;
   int _winStreak = 0;
@@ -59,26 +58,36 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _checkSavedSession() async {
     final prefs = await SharedPreferences.getInstance();
     final savedSsid = prefs.getString('quotex_ssid');
-    final savedEmail = prefs.getString('quotex_email');
-    if (savedSsid != null && savedEmail != null) {
+    if (savedSsid != null) {
       setState(() => _isLoggedIn = true);
+      await _injectSSIDIntoWebView(savedSsid);
       await _loadAssets();
       await _fetchHistoricalPrices();
     }
   }
 
+  // حقن SSID في WebView لتسجيل الدخول التلقائي
+  Future<void> _injectSSIDIntoWebView(String ssid) async {
+    await _webViewController.runJavaScript('''
+      (function() {
+        document.cookie = "ssid=$ssid; path=/";
+        document.cookie = "remember_web=$ssid; path=/";
+        console.log("✅ تم حقن SSID في WebView");
+        location.reload();
+      })();
+    ''');
+  }
+
   Future<void> _login() async {
     final ssid = _ssidController.text.trim();
-    final email = _emailController.text.trim();
 
-    if (ssid.isEmpty || email.isEmpty) {
-      _showSnackbar('الرجاء إدخال SSID والبريد الإلكتروني');
+    if (ssid.isEmpty) {
+      _showSnackbar('الرجاء إدخال SSID');
       return;
     }
 
     setState(() => _isLoading = true);
 
-    // 1. التحقق من صحة SSID
     bool ssidValid = await _api.loginWithSSID(ssid);
     if (!ssidValid) {
       _showSnackbar('❌ SSID غير صالح');
@@ -86,25 +95,11 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // 2. جلب البريد الإلكتروني من الـ SSID
-    String? fetchedEmail = await _api.getUserEmail();
-    if (fetchedEmail == null) {
-      _showSnackbar('❌ فشل التحقق من البريد الإلكتروني');
-      setState(() => _isLoading = false);
-      return;
-    }
-
-    // 3. مقارنة البريد المدخل مع البريد الذي تم جلبه
-    if (fetchedEmail.toLowerCase() != email.toLowerCase()) {
-      _showSnackbar('❌ البريد الإلكتروني لا يطابق SSID');
-      setState(() => _isLoading = false);
-      return;
-    }
-
-    // 4. كل شيء صحيح، نكمل تسجيل الدخول
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('quotex_ssid', ssid);
-    await prefs.setString('quotex_email', email);
+
+    // حقن SSID في WebView
+    await _injectSSIDIntoWebView(ssid);
 
     setState(() {
       _isLoggedIn = true;
@@ -440,15 +435,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 border: OutlineInputBorder(),
               ),
               maxLines: 3,
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'البريد الإلكتروني',
-                hintText: 'example@email.com',
-                border: OutlineInputBorder(),
-              ),
             ),
             const SizedBox(height: 30),
             ElevatedButton.icon(
