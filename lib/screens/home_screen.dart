@@ -68,14 +68,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // حقن SSID في WebView لتسجيل الدخول التلقائي
   Future<void> _injectSSIDIntoWebView(String ssid) async {
+    await Future.delayed(Duration(seconds: 2));
     await _webViewController.runJavaScript('''
       (function() {
-        document.cookie = "ssid=$ssid; path=/";
-        document.cookie = "remember_web=$ssid; path=/";
+        document.cookie = "ssid=$ssid; path=/; domain=qxbroker.com";
+        document.cookie = "remember_web=$ssid; path=/; domain=qxbroker.com";
+        localStorage.setItem('ssid', '$ssid');
+        localStorage.setItem('session_id', '$ssid');
         console.log("✅ تم حقن SSID في WebView");
-        location.reload();
+        setTimeout(() => location.reload(), 500);
       })();
     ''');
+    await Future.delayed(Duration(seconds: 3));
   }
 
   Future<void> _login() async {
@@ -98,7 +102,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('quotex_ssid', ssid);
 
-    // حقن SSID في WebView
     await _injectSSIDIntoWebView(ssid);
 
     setState(() {
@@ -106,6 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _isLoading = false;
     });
     _showSnackbar('✅ تم تسجيل الدخول بنجاح');
+    await Future.delayed(Duration(seconds: 2));
     await _loadAssets();
     await _fetchHistoricalPrices();
   }
