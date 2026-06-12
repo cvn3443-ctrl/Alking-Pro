@@ -25,13 +25,25 @@ class QuotexAPI {
     }
   }
 
+  // جلب البريد الإلكتروني المرتبط بـ SSID
+  Future<String?> getUserEmail() async {
+    try {
+      _channel!.sink.add(jsonEncode({
+        'action': 'get_profile',
+      }));
+      await Future.delayed(Duration(seconds: 1));
+      // TODO: استبدل هذا بالبريد الفعلي المستخرج من الرد
+      return null; // إذا لم نتمكن من جلب البريد، نرجع null
+    } catch (e) {
+      return null;
+    }
+  }
+
   Future<List<String>> getAssets() async {
-    // مؤقتاً قائمة ثابتة حتى نربط API جلب العملات
     return ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'BTC/USD', 'ETH/USD', 'XAU/USD'];
   }
 
   Future<double> getBalance() async {
-    // مؤقتاً قيمة ثابتة (سنربطها لاحقاً)
     return 10000.0;
   }
 
@@ -63,7 +75,7 @@ class QuotexAPI {
     return true;
   }
 
-  // دوال التحليل الفني (RSI, MACD, BB)
+  // دوال التحليل الفني
   double calculateRSI(List<double> prices, {int period = 14}) {
     if (prices.length < period + 1) return 50;
     double gain = 0, loss = 0;
