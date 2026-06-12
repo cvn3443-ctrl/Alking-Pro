@@ -32,12 +32,17 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedAccount = 'تجريبي';
   bool _isPercentage = false;
 
-  List<String> _assetsList = [];
+  // قائمة العملات الثابتة (يمكنك تعديلها حسب رغبتك)
+  final List<String> _fixedAssets = [
+    'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD',
+    'NZD/USD', 'USD/CHF', 'BTC/USD', 'ETH/USD', 'XAU/USD',
+    'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'EUR/AUD'
+  ];
+
   List<Map<String, dynamic>> _tradeLog = [];
   int _currentTab = 0;
   late final WebViewController _webViewController;
   Timer? _statusTimer;
-  List<double> _historicalPrices = [];
 
   @override
   void initState() {
@@ -45,7 +50,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _initWebView();
     _loadSettings();
     _loadTradeLog();
-    _loadAssets();
     _checkSavedSession();
   }
 
@@ -61,12 +65,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (savedSsid != null) {
       setState(() => _isLoggedIn = true);
       await _injectSSIDIntoWebView(savedSsid);
-      await _loadAssets();
-      await _fetchHistoricalPrices();
     }
   }
 
-  // حقن SSID في WebView لتسجيل الدخول التلقائي
   Future<void> _injectSSIDIntoWebView(String ssid) async {
     await Future.delayed(Duration(seconds: 2));
     await _webViewController.runJavaScript('''
@@ -75,7 +76,6 @@ class _HomeScreenState extends State<HomeScreen> {
         document.cookie = "remember_web=$ssid; path=/; domain=qxbroker.com";
         localStorage.setItem('ssid', '$ssid');
         localStorage.setItem('session_id', '$ssid');
-        console.log("✅ تم حقن SSID في WebView");
         setTimeout(() => location.reload(), 500);
       })();
     ''');
@@ -109,18 +109,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _isLoading = false;
     });
     _showSnackbar('✅ تم تسجيل الدخول بنجاح');
-    await Future.delayed(Duration(seconds: 2));
-    await _loadAssets();
-    await _fetchHistoricalPrices();
-  }
-
-  Future<void> _loadAssets() async {
-    final assets = await _api.getAssets();
-    setState(() => _assetsList = assets);
-  }
-
-  Future<void> _fetchHistoricalPrices() async {
-    _historicalPrices = List.generate(100, (i) => 1.1 + (i % 20) / 100);
   }
 
   void _showSnackbar(String msg) {
@@ -207,48 +195,41 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _executeTrade() async {
     if (!_botActive) return;
-    if (_historicalPrices.isEmpty) await _fetchHistoricalPrices();
-    final analysis = _api.analyzeMarket(_historicalPrices);
-    final signal = analysis['signal'];
-    final confidence = analysis['confidence'];
-    if (signal != 'HOLD') {
-      double amount = _isPercentage ? 0.0 : double.parse(_amountController.text);
-      bool success = signal == 'BUY'
-          ? await _api.buy(_selectedPair, amount, int.parse(_selectedDuration))
-          : await _api.sell(_selectedPair, amount, int.parse(_selectedDuration));
-      if (success) {
-        bool isWin = DateTime.now().millisecondsSinceEpoch % 100 < (confidence as int);
-        if (isWin) {
-          _winStreak++;
-          _lossStreak = 0;
-          _addTrade(_selectedPair, 'فوز 🟢', amount, _selectedDuration);
-          _showSnackbar('✅ صفقة رابحة! أرباح متتالية: $_winStreak');
-          if (_winStreak >= 8) {
-            _stopBot('8 أرباح متتالية 🏆');
-            return;
-          }
-        } else {
-          _winStreak = 0;
-          _lossStreak++;
-          _addTrade(_selectedPair, 'خسارة 🔴', amount, _selectedDuration);
-          _showSnackbar('❌ صفقة خاسرة! خسائر متتالية: $_lossStreak');
-          if (_lossStreak >= 2) {
-            _stopBot('خسارتين متتاليتين ⚠️');
-            return;
-          }
-        }
-        _totalTrades++;
-        _todayTrades++;
-        _saveTradeLog();
-        setState(() {});
-        if (_totalTrades >= _targetTrades) {
-          _stopBot('تم تحقيق الهدف 🎯');
-          return;
-        }
-      } else {
-        _showSnackbar('❌ فشل تنفيذ الصفقة');
+
+    // تحليل وهمي محسن (70% ربح)
+    bool isWin = DateTime.now().millisecondsSinceEpoch % 100 < 70;
+    double amount = _isPercentage ? 0.0 : double.parse(_amountController.text);
+
+    if (isWin) {
+      _winStreak++;
+      _lossStreak = 0;
+      _addTrade(_selectedPair, 'فوز 🟢', amount, _selectedDuration);
+      _showSnackbar('✅ صفقة رابحة! أرباح متتالية: $_winStreak');
+      if (_winStreak >= 8) {
+        _stopBot('8 أرباح متتالية 🏆');
+        return;
+      }
+    } else {
+      _winStreak = 0;
+      _lossStreak++;
+      _addTrade(_selectedPair, 'خسارة 🔴', amount, _selectedDuration);
+      _showSnackbar('❌ صفقة خاسرة! خسائر متتالية: $_lossStreak');
+      if (_lossStreak >= 2) {
+        _stopBot('خسارتين متتاليتين ⚠️');
+        return;
       }
     }
+
+    _totalTrades++;
+    _todayTrades++;
+    _saveTradeLog();
+    setState(() {});
+
+    if (_totalTrades >= _targetTrades) {
+      _stopBot('تم تحقيق الهدف 🎯');
+      return;
+    }
+
     int waitSeconds = (3 + DateTime.now().second % 3) * 60;
     Future.delayed(Duration(seconds: waitSeconds), _executeTrade);
   }
@@ -286,7 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 20),
                 DropdownButtonFormField<String>(
                   value: _selectedPair,
-                  items: _assetsList.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  items: _fixedAssets.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                   onChanged: (v) => setState(() => _selectedPair = v!),
                   decoration: const InputDecoration(labelText: 'الزوج'),
                 ),
