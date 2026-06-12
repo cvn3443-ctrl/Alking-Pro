@@ -62,38 +62,57 @@ class _HomeScreenState extends State<HomeScreen> {
     final savedEmail = prefs.getString('quotex_email');
     if (savedSsid != null && savedEmail != null) {
       setState(() => _isLoggedIn = true);
-      await _loginWithSSID(savedSsid, savedEmail);
-    }
-  }
-
-  Future<void> _loginWithSSID(String ssid, String email) async {
-    setState(() => _isLoading = true);
-    bool success = await _api.loginWithSSID(ssid);
-    if (success) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('quotex_ssid', ssid);
-      await prefs.setString('quotex_email', email);
-      setState(() {
-        _isLoggedIn = true;
-        _isLoading = false;
-      });
-      _showSnackbar('✅ تم تسجيل الدخول بنجاح');
       await _loadAssets();
       await _fetchHistoricalPrices();
-    } else {
-      _showSnackbar('❌ فشل تسجيل الدخول');
-      setState(() => _isLoading = false);
     }
   }
 
   Future<void> _login() async {
     final ssid = _ssidController.text.trim();
     final email = _emailController.text.trim();
+
     if (ssid.isEmpty || email.isEmpty) {
       _showSnackbar('الرجاء إدخال SSID والبريد الإلكتروني');
       return;
     }
-    await _loginWithSSID(ssid, email);
+
+    setState(() => _isLoading = true);
+
+    // 1. التحقق من صحة SSID
+    bool ssidValid = await _api.loginWithSSID(ssid);
+    if (!ssidValid) {
+      _showSnackbar('❌ SSID غير صالح');
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    // 2. جلب البريد الإلكتروني من الـ SSID
+    String? fetchedEmail = await _api.getUserEmail();
+    if (fetchedEmail == null) {
+      _showSnackbar('❌ فشل التحقق من البريد الإلكتروني');
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    // 3. مقارنة البريد المدخل مع البريد الذي تم جلبه
+    if (fetchedEmail.toLowerCase() != email.toLowerCase()) {
+      _showSnackbar('❌ البريد الإلكتروني لا يطابق SSID');
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    // 4. كل شيء صحيح، نكمل تسجيل الدخول
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('quotex_ssid', ssid);
+    await prefs.setString('quotex_email', email);
+
+    setState(() {
+      _isLoggedIn = true;
+      _isLoading = false;
+    });
+    _showSnackbar('✅ تم تسجيل الدخول بنجاح');
+    await _loadAssets();
+    await _fetchHistoricalPrices();
   }
 
   Future<void> _loadAssets() async {
@@ -102,7 +121,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchHistoricalPrices() async {
-    // محاكاة جلب بيانات تاريخية (سنربطها بـ API حقيقي لاحقاً)
     _historicalPrices = List.generate(100, (i) => 1.1 + (i % 20) / 100);
   }
 
