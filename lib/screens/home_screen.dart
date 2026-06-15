@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../services/quotex_api.dart';
+import '../services/api_service.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -13,10 +13,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final QuotexAPI _api = QuotexAPI();
   bool _isLoading = false;
   bool _isLoggedIn = false;
-  final TextEditingController _ssidController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
   bool _botActive = false;
   int _winStreak = 0;
@@ -32,13 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedAccount = 'تجريبي';
   bool _isPercentage = false;
 
-  // قائمة العملات الثابتة (يمكنك تعديلها حسب رغبتك)
-  final List<String> _fixedAssets = [
-    'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD',
-    'NZD/USD', 'USD/CHF', 'BTC/USD', 'ETH/USD', 'XAU/USD',
-    'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY', 'EUR/AUD'
-  ];
-
+  List<String> _assetsList = [];
   List<Map<String, dynamic>> _tradeLog = [];
   int _currentTab = 0;
   late final WebViewController _webViewController;
@@ -50,7 +44,9 @@ class _HomeScreenState extends State<HomeScreen> {
     _initWebView();
     _loadSettings();
     _loadTradeLog();
+    _loadAssets();
     _checkSavedSession();
+    _startStatusPolling();
   }
 
   void _initWebView() {
@@ -61,54 +57,57 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _checkSavedSession() async {
     final prefs = await SharedPreferences.getInstance();
-    final savedSsid = prefs.getString('quotex_ssid');
-    if (savedSsid != null) {
+    final email = prefs.getString('quotex_email');
+    if (email != null) {
       setState(() => _isLoggedIn = true);
-      await _injectSSIDIntoWebView(savedSsid);
     }
   }
 
-  Future<void> _injectSSIDIntoWebView(String ssid) async {
-    await Future.delayed(Duration(seconds: 2));
-    await _webViewController.runJavaScript('''
-      (function() {
-        document.cookie = "ssid=$ssid; path=/; domain=qxbroker.com";
-        document.cookie = "remember_web=$ssid; path=/; domain=qxbroker.com";
-        localStorage.setItem('ssid', '$ssid');
-        localStorage.setItem('session_id', '$ssid');
-        setTimeout(() => location.reload(), 500);
-      })();
-    ''');
-    await Future.delayed(Duration(seconds: 3));
+  Future<void> _loadAssets() async {
+    final assets = await ApiService.getAssets();
+    setState(() => _assetsList = assets);
+  }
+
+  void _startStatusPolling() {
+    _statusTimer = Timer.periodic(Duration(seconds: 5), (timer) async {
+      if (_isLoggedIn) {
+        final status = await ApiService.getStatus();
+        setState(() {
+          _botActive = status['active'] ?? false;
+          _winStreak = status['win_streak'] ?? 0;
+          _lossStreak = status['loss_streak'] ?? 0;
+          _totalTrades = status['total_trades'] ?? 0;
+        });
+      }
+    });
   }
 
   Future<void> _login() async {
-    final ssid = _ssidController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
 
-    if (ssid.isEmpty) {
-      _showSnackbar('الرجاء إدخال SSID');
+    if (email.isEmpty || password.isEmpty) {
+      _showSnackbar('الرجاء إدخال البريد الإلكتروني وكلمة السر');
       return;
     }
 
     setState(() => _isLoading = true);
 
-    bool ssidValid = await _api.loginWithSSID(ssid);
-    if (!ssidValid) {
-      _showSnackbar('❌ SSID غير صالح');
+    final result = await ApiService.login(email, password);
+
+    if (result['status'] == 'success') {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('quotex_email', email);
+      setState(() {
+        _isLoggedIn = true;
+        _isLoading = false;
+      });
+      _showSnackbar('✅ تم تسجيل الدخول بنجاح');
+      await _loadAssets();
+    } else {
+      _showSnackbar(result['message'] ?? '❌ فشل تسجيل الدخول');
       setState(() => _isLoading = false);
-      return;
     }
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('quotex_ssid', ssid);
-
-    await _injectSSIDIntoWebView(ssid);
-
-    setState(() {
-      _isLoggedIn = true;
-      _isLoading = false;
-    });
-    _showSnackbar('✅ تم تسجيل الدخول بنجاح');
   }
 
   void _showSnackbar(String msg) {
@@ -125,7 +124,6 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.setInt('maxTradesPerDay', _maxTradesPerDay);
     await prefs.setInt('targetTrades', _targetTrades);
     _showSnackbar('تم حفظ الإعدادات ✅');
-    await _api.switchAccount(_selectedAccount == 'تجريبي' ? 'demo' : 'real');
   }
 
   Future<void> _loadSettings() async {
@@ -139,7 +137,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _maxTradesPerDay = prefs.getInt('maxTradesPerDay') ?? 50;
       _targetTrades = prefs.getInt('targetTrades') ?? 5;
     });
-    await _api.switchAccount(_selectedAccount == 'تجريبي' ? 'demo' : 'real');
   }
 
   Future<void> _loadTradeLog() async {
@@ -196,7 +193,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void _executeTrade() async {
     if (!_botActive) return;
 
-    // تحليل وهمي محسن (70% ربح)
     bool isWin = DateTime.now().millisecondsSinceEpoch % 100 < 70;
     double amount = _isPercentage ? 0.0 : double.parse(_amountController.text);
 
@@ -267,7 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 20),
                 DropdownButtonFormField<String>(
                   value: _selectedPair,
-                  items: _fixedAssets.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  items: _assetsList.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                   onChanged: (v) => setState(() => _selectedPair = v!),
                   decoration: const InputDecoration(labelText: 'الزوج'),
                 ),
@@ -319,11 +315,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 DropdownButtonFormField<String>(
                   value: _selectedAccount,
                   items: ['تجريبي', 'حقيقي'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                  onChanged: (v) async {
-                    setState(() => _selectedAccount = v!);
-                    await _api.switchAccount(v == 'تجريبي' ? 'demo' : 'real');
-                    _showSnackbar('✅ تم تبديل الحساب إلى $_selectedAccount');
-                  },
+                  onChanged: (v) => setState(() => _selectedAccount = v!),
                   decoration: const InputDecoration(labelText: 'نوع الحساب'),
                 ),
                 const SizedBox(height: 15),
@@ -408,20 +400,21 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.vpn_key, size: 80, color: Colors.green),
+            const Icon(Icons.lock, size: 80, color: Colors.grey),
             const SizedBox(height: 20),
-            const Text('تسجيل الدخول', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 30),
+            const Text('تسجيل الدخول إلى Quotex', style: TextStyle(fontSize: 20)),
+            const SizedBox(height: 20),
             TextField(
-              controller: _ssidController,
-              decoration: const InputDecoration(
-                labelText: 'SSID',
-                hintText: 'eyJpdiI6ImdyRXV3...',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
+              controller: _emailController,
+              decoration: const InputDecoration(labelText: 'البريد الإلكتروني', border: OutlineInputBorder()),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'كلمة السر', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 20),
             ElevatedButton.icon(
               onPressed: _isLoading ? null : _login,
               icon: const Icon(Icons.login),
@@ -453,10 +446,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 5),
                     Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [const Text('المتبقي:'), Text('$remainingTarget / $_targetTrades')]),
-                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [const Text('أرباح متتالية:'), Text('$_winStreak', style: const TextStyle(color: Colors.green))]),
-                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [const Text('خسائر متتالية:'), Text('$_lossStreak', style: const TextStyle(color: Colors.red))]),
                   ],
                   const SizedBox(height: 8),
                   Container(
@@ -467,7 +456,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text('الزوج: $_selectedPair'),
                         Text('المبلغ: ${_isPercentage ? "2%" : "${_amountController.text} دولار"}'),
                         Text('المدة: $_selectedDuration دقيقة'),
-                        Text('الحساب: $_selectedAccount'),
                       ],
                     ),
                   ),
