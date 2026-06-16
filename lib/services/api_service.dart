@@ -2,74 +2,170 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class ApiService {
-  // 🔥 رابط السيرفر على Render (عدله إذا تغير)
-  static const String baseUrl = 'https://alking-server-3.onrender.com';
+  // رابط السيرفر على Render
+  static const String baseUrl = 'https://alking-pro-trading-server-3.onrender.com';
 
-  static Future<Map<String, dynamic>> login(String email, String password) async {
+  // ============== تسجيل الدخول ==============
+  Future<Map<String, dynamic>> login(String email, String password) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/login'),
+        Uri.parse('$baseUrl/api/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'password': password}),
       );
-      return jsonDecode(response.body);
+
+      if (response.statusCode == 200 || response.statusCode == 401) {
+        return jsonDecode(response.body);
+      } else {
+        return {
+          'success': false,
+          'message': 'خطأ في السيرفر: ${response.statusCode}'
+        };
+      }
     } catch (e) {
-      return {'status': 'error', 'message': 'فشل الاتصال بالسيرفر'};
+      return {'success': false, 'message': 'فشل الاتصال بالسيرفر: $e'};
     }
   }
 
-  static Future<Map<String, dynamic>> startTrading({
-    required String pair,
+  // ============== جلب العملات ==============
+  Future<Map<String, dynamic>> getSymbols() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/symbols'),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else if (response.statusCode == 401) {
+        return {'success': false, 'message': 'يجب تسجيل الدخول أولاً'};
+      } else {
+        return {
+          'success': false,
+          'message': 'خطأ في جلب العملات: ${response.statusCode}'
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'فشل الاتصال بالسيرفر: $e'};
+    }
+  }
+
+  // ============== تحليل فقط (بدون تنفيذ) ==============
+  Future<Map<String, dynamic>> analyzeOnly({
+    required String symbol,
     required double amount,
-    required int duration,
-    required String accountType,
-    required int targetTrades,
-    required int maxTradesPerDay,
+    required bool isDemo,
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/start'),
+        Uri.parse('$baseUrl/api/trade/analyze'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'pair': pair,
+          'symbol': symbol,
           'amount': amount,
-          'duration': duration,
-          'account_type': accountType,
-          'target_trades': targetTrades,
-          'max_trades_per_day': maxTradesPerDay,
+          'is_demo': isDemo,
         }),
       );
-      return jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else if (response.statusCode == 401) {
+        return {'success': false, 'message': 'يجب تسجيل الدخول أولاً'};
+      } else {
+        return {
+          'success': false,
+          'message': 'خطأ في التحليل: ${response.statusCode}'
+        };
+      }
     } catch (e) {
-      return {'status': 'error', 'message': 'فشل بدء التداول'};
+      return {'success': false, 'message': 'فشل الاتصال بالسيرفر: $e'};
     }
   }
 
-  static Future<Map<String, dynamic>> stopTrading() async {
+  // ============== تنفيذ صفقة ==============
+  Future<Map<String, dynamic>> executeTrade({
+    required String symbol,
+    required double amount,
+    required bool isDemo,
+  }) async {
     try {
-      final response = await http.post(Uri.parse('$baseUrl/stop'));
-      return jsonDecode(response.body);
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/trade/execute'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'symbol': symbol,
+          'amount': amount,
+          'is_demo': isDemo,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else if (response.statusCode == 401) {
+        return {'success': false, 'message': 'يجب تسجيل الدخول أولاً'};
+      } else {
+        return {
+          'success': false,
+          'message': 'خطأ في تنفيذ الصفقة: ${response.statusCode}'
+        };
+      }
     } catch (e) {
-      return {'status': 'error', 'message': 'فشل إيقاف التداول'};
+      return {'success': false, 'message': 'فشل الاتصال بالسيرفر: $e'};
     }
   }
 
-  static Future<Map<String, dynamic>> getStatus() async {
+  // ============== إعادة تعيين حالة الإيقاف ==============
+  Future<Map<String, dynamic>> resetTrading() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/status'));
-      return jsonDecode(response.body);
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/trade/reset'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'confirm': true}),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return {
+          'success': false,
+          'message': 'فشل إعادة التعيين: ${response.statusCode}'
+        };
+      }
     } catch (e) {
-      return {'active': false};
+      return {'success': false, 'message': 'فشل الاتصال بالسيرفر: $e'};
     }
   }
 
-  static Future<List<String>> getAssets() async {
+  // ============== الحصول على حالة النظام ==============
+  Future<Map<String, dynamic>> getStatus() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/assets'));
-      final data = jsonDecode(response.body);
-      return List<String>.from(data['assets']);
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/status'),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return {'success': false, 'message': 'فشل جلب الحالة'};
+      }
     } catch (e) {
-      return ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'BTC/USD'];
+      return {'success': false, 'message': 'فشل الاتصال بالسيرفر: $e'};
+    }
+  }
+
+  // ============== التحقق من صحة السيرفر ==============
+  Future<Map<String, dynamic>> healthCheck() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/health'),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return {'status': 'unhealthy'};
+      }
+    } catch (e) {
+      return {'status': 'unhealthy', 'error': e.toString()};
     }
   }
 }
