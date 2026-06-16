@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../providers/trading_provider.dart';
 import '../widgets/symbol_selector.dart';
 import 'login_screen.dart';
@@ -18,7 +19,6 @@ class _TradingScreenState extends State<TradingScreen> {
   @override
   void initState() {
     super.initState();
-    // تحديث حالة السيرفر عند فتح الشاشة
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TradingProvider>().getStatus();
     });
@@ -49,11 +49,10 @@ class _TradingScreenState extends State<TradingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ====== بطاقة الحالة ======
                 _buildStatusCard(provider),
                 const SizedBox(height: 16),
-
-                // ====== اختيار الزوج ======
+                _buildPlatformWebView(),
+                const SizedBox(height: 16),
                 SymbolSelector(
                   symbols: provider.symbols,
                   selectedSymbol: provider.selectedSymbol,
@@ -62,20 +61,12 @@ class _TradingScreenState extends State<TradingScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-
-                // ====== المبلغ ======
                 _buildAmountField(provider),
                 const SizedBox(height: 16),
-
-                // ====== نوع الحساب ======
                 _buildAccountTypeToggle(provider),
                 const SizedBox(height: 16),
-
-                // ====== أزرار التحكم ======
                 _buildControlButtons(provider),
                 const SizedBox(height: 16),
-
-                // ====== الإحصائيات ======
                 _buildStatsRow(provider),
               ],
             ),
@@ -85,7 +76,21 @@ class _TradingScreenState extends State<TradingScreen> {
     );
   }
 
-  // ============== بطاقة الحالة ==============
+  Widget _buildPlatformWebView() {
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D0D0D),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade800),
+      ),
+      child: const WebView(
+        initialUrl: 'https://qxbroker.com',
+        javascriptMode: JavascriptMode.unrestricted,
+      ),
+    );
+  }
+
   Widget _buildStatusCard(TradingProvider provider) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -146,7 +151,6 @@ class _TradingScreenState extends State<TradingScreen> {
     );
   }
 
-  // ============== حقل المبلغ ==============
   Widget _buildAmountField(TradingProvider provider) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -188,7 +192,6 @@ class _TradingScreenState extends State<TradingScreen> {
     );
   }
 
-  // ============== تبديل نوع الحساب ==============
   Widget _buildAccountTypeToggle(TradingProvider provider) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -230,7 +233,6 @@ class _TradingScreenState extends State<TradingScreen> {
     );
   }
 
-  // ============== أزرار التحكم ==============
   Widget _buildControlButtons(TradingProvider provider) {
     return Row(
       children: [
@@ -289,7 +291,6 @@ class _TradingScreenState extends State<TradingScreen> {
     );
   }
 
-  // ============== صف الإحصائيات ==============
   Widget _buildStatsRow(TradingProvider provider) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -340,7 +341,6 @@ class _TradingScreenState extends State<TradingScreen> {
     );
   }
 
-  // ============== دالة تنفيذ الصفقة ==============
   Future<void> _handleExecuteTrade(TradingProvider provider) async {
     if (provider.selectedSymbol == null) {
       Fluttertoast.showToast(
@@ -403,12 +403,10 @@ class _TradingScreenState extends State<TradingScreen> {
       if (mounted) {
         setState(() => _isExecuting = false);
       }
-      // تحديث الحالة بعد التنفيذ
       await provider.getStatus();
     }
   }
 
-  // ============== دالة إعادة التعيين ==============
   Future<void> _handleResetTrading() async {
     final provider = context.read<TradingProvider>();
     final result = await provider.resetTrading();
@@ -433,7 +431,6 @@ class _TradingScreenState extends State<TradingScreen> {
     }
   }
 
-  // ============== دالة تسجيل الخروج ==============
   Future<void> _handleLogout() async {
     final confirm = await showDialog<bool>(
       context: context,
