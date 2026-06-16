@@ -46,6 +46,35 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> analyzeOnly({
+    required String symbol,
+    required double amount,
+    required bool isDemo,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/trade/analyze'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'symbol': symbol,
+          'amount': amount,
+          'is_demo': isDemo,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return {
+          'success': false,
+          'message': 'خطأ في التحليل: ${response.statusCode}'
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'فشل الاتصال بالسيرفر: $e'};
+    }
+  }
+
   Future<Map<String, dynamic>> executeTrade({
     required String symbol,
     required double amount,
