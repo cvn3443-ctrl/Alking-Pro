@@ -6,26 +6,22 @@ import '../models/trading_models.dart';
 class TradingProvider extends ChangeNotifier {
   final ApiService _apiService = ApiService();
 
-  // حالة المستخدم
   String? _email;
   String? _token;
   bool _isLoggedIn = false;
   bool _isPaused = false;
   String? _errorMessage;
 
-  // بيانات التداول
   List<String> _symbols = [];
   String? _selectedSymbol;
   double _amount = 10.0;
   bool _isDemo = true;
   int _expiryMinutes = 1;
 
-  // إحصائيات
   int _consecutiveWins = 0;
   int _consecutiveLosses = 0;
   int _totalTrades = 0;
 
-  // Getters
   String? get email => _email;
   String? get token => _token;
   bool get isLoggedIn => _isLoggedIn;
@@ -40,7 +36,6 @@ class TradingProvider extends ChangeNotifier {
   int get consecutiveLosses => _consecutiveLosses;
   int get totalTrades => _totalTrades;
 
-  // Setters
   set selectedSymbol(String? value) {
     _selectedSymbol = value;
     notifyListeners();
@@ -61,8 +56,6 @@ class TradingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ============== وظائف تسجيل الدخول ==============
-
   Future<bool> login(String email, String password) async {
     _errorMessage = null;
     notifyListeners();
@@ -75,14 +68,11 @@ class TradingProvider extends ChangeNotifier {
         _token = response['token'] ?? 'session_token';
         _isLoggedIn = true;
 
-        // حفظ البيانات محلياً
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('email', email);
         await prefs.setString('token', _token!);
 
-        // جلب العملات فور تسجيل الدخول
         await fetchSymbols();
-
         return true;
       } else {
         _errorMessage = response['message'] ?? 'فشل تسجيل الدخول';
@@ -125,8 +115,6 @@ class TradingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ============== جلب العملات ==============
-
   Future<void> fetchSymbols() async {
     try {
       final response = await _apiService.getSymbols();
@@ -142,8 +130,6 @@ class TradingProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-
-  // ============== تنفيذ الصفقات ==============
 
   Future<Map<String, dynamic>> executeTrade() async {
     if (_selectedSymbol == null) {
@@ -165,7 +151,6 @@ class TradingProvider extends ChangeNotifier {
         _consecutiveLosses = response['trade']?['consecutive_losses'] ?? 0;
         _isPaused = response['trade']?['is_paused'] ?? false;
         notifyListeners();
-
         return response;
       } else {
         _errorMessage = response['message'] ?? 'فشل تنفيذ الصفقة';
@@ -192,7 +177,6 @@ class TradingProvider extends ChangeNotifier {
         amount: _amount,
         isDemo: _isDemo,
       );
-
       return response;
     } catch (e) {
       _errorMessage = 'خطأ في التحليل: $e';
