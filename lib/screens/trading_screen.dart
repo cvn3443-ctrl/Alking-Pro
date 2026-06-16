@@ -86,7 +86,7 @@ class _TradingScreenState extends State<TradingScreen> {
       ),
       child: const WebView(
         initialUrl: 'https://qxbroker.com',
-        javascriptMode: JavascriptMode.unrestricted,
+        // javascriptMode: JavascriptMode.unrestricted, // علقته لتجنب الأخطاء
       ),
     );
   }
