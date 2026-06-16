@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../providers/trading_provider.dart';
+import '../services/api_service.dart';
 import 'main_tab_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -113,18 +114,55 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
+    
     setState(() => _isLoading = true);
+
+    // اختبار الاتصال أولاً
+    final apiService = ApiService();
+    final isConnected = await apiService.testConnection();
+    
+    if (!isConnected) {
+      setState(() => _isLoading = false);
+      Fluttertoast.showToast(
+        msg: '❌ لا يمكن الاتصال بالسيرفر. تحقق من اتصال الإنترنت.',
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+        toastLength: Toast.LENGTH_LONG,
+      );
+      return;
+    }
+
     final provider = context.read<TradingProvider>();
-    final success = await provider.login(_emailController.text.trim(), _passwordController.text.trim());
+    final success = await provider.login(
+      _emailController.text.trim(),
+      _passwordController.text.trim(),
+    );
+
     setState(() => _isLoading = false);
+
     if (success && mounted) {
-      Fluttertoast.showToast(msg: '✅ تم تسجيل الدخول بنجاح', backgroundColor: Colors.green, textColor: Colors.white);
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainTabScreen()));
+      Fluttertoast.showToast(
+        msg: '✅ تم تسجيل الدخول بنجاح',
+        backgroundColor: Colors.green,
+        textColor: Colors.white,
+      );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MainTabScreen()),
+      );
     } else {
-      Fluttertoast.showToast(msg: provider.errorMessage ?? '❌ فشل تسجيل الدخول', backgroundColor: Colors.red, textColor: Colors.white);
+      Fluttertoast.showToast(
+        msg: provider.errorMessage ?? '❌ فشل تسجيل الدخول',
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+      );
     }
   }
 
   @override
-  void dispose() { _emailController.dispose(); _passwordController.dispose(); super.dispose(); }
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 }
