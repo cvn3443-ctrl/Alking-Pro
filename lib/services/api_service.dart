@@ -2,10 +2,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class ApiService {
-  // رابط السيرفر على Render
   static const String baseUrl = 'https://alking-pro-trading-server-3.onrender.com';
 
-  // ============== تسجيل الدخول ==============
   Future<Map<String, dynamic>> login(String email, String password) async {
     try {
       final response = await http.post(
@@ -27,7 +25,6 @@ class ApiService {
     }
   }
 
-  // ============== جلب العملات ==============
   Future<Map<String, dynamic>> getSymbols() async {
     try {
       final response = await http.get(
@@ -49,39 +46,6 @@ class ApiService {
     }
   }
 
-  // ============== تحليل فقط (بدون تنفيذ) ==============
-  Future<Map<String, dynamic>> analyzeOnly({
-    required String symbol,
-    required double amount,
-    required bool isDemo,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/trade/analyze'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'symbol': symbol,
-          'amount': amount,
-          'is_demo': isDemo,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      } else if (response.statusCode == 401) {
-        return {'success': false, 'message': 'يجب تسجيل الدخول أولاً'};
-      } else {
-        return {
-          'success': false,
-          'message': 'خطأ في التحليل: ${response.statusCode}'
-        };
-      }
-    } catch (e) {
-      return {'success': false, 'message': 'فشل الاتصال بالسيرفر: $e'};
-    }
-  }
-
-  // ============== تنفيذ صفقة ==============
   Future<Map<String, dynamic>> executeTrade({
     required String symbol,
     required double amount,
@@ -98,14 +62,24 @@ class ApiService {
         }),
       );
 
+      print('Status: ${response.statusCode}');
+      print('Body: ${response.body}');
+
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      } else if (response.statusCode == 401) {
-        return {'success': false, 'message': 'يجب تسجيل الدخول أولاً'};
+        try {
+          return jsonDecode(response.body);
+        } catch (e) {
+          return {
+            'success': false,
+            'message': 'خطأ في قراءة الرد: $e',
+            'raw': response.body,
+          };
+        }
       } else {
         return {
           'success': false,
-          'message': 'خطأ في تنفيذ الصفقة: ${response.statusCode}'
+          'message': 'خطأ في السيرفر: ${response.statusCode}',
+          'raw': response.body,
         };
       }
     } catch (e) {
@@ -113,7 +87,6 @@ class ApiService {
     }
   }
 
-  // ============== إعادة تعيين حالة الإيقاف ==============
   Future<Map<String, dynamic>> resetTrading() async {
     try {
       final response = await http.post(
@@ -135,7 +108,6 @@ class ApiService {
     }
   }
 
-  // ============== الحصول على حالة النظام ==============
   Future<Map<String, dynamic>> getStatus() async {
     try {
       final response = await http.get(
@@ -152,7 +124,6 @@ class ApiService {
     }
   }
 
-  // ============== التحقق من صحة السيرفر ==============
   Future<Map<String, dynamic>> healthCheck() async {
     try {
       final response = await http.get(
