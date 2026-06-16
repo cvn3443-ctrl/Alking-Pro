@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import '../providers/trading_provider.dart';
 import '../widgets/symbol_selector.dart';
 import 'login_screen.dart';
@@ -84,9 +83,11 @@ class _TradingScreenState extends State<TradingScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade800),
       ),
-      child: const WebView(
-        initialUrl: 'https://qxbroker.com',
-        // javascriptMode: JavascriptMode.unrestricted, // علقته لتجنب الأخطاء
+      child: const Center(
+        child: Text(
+          'منصة Quotex',
+          style: TextStyle(color: Colors.grey, fontSize: 16),
+        ),
       ),
     );
   }
