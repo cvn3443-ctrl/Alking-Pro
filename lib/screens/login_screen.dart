@@ -38,7 +38,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // الشعار والعنوان
                   const Icon(
                     Icons.trending_up,
                     size: 80,
@@ -65,7 +64,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 40),
 
-                  // حقل البريد الإلكتروني
                   TextFormField(
                     controller: _emailController,
                     style: const TextStyle(color: Colors.white),
@@ -95,7 +93,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // حقل كلمة السر
                   TextFormField(
                     controller: _passwordController,
                     style: const TextStyle(color: Colors.white),
@@ -139,7 +136,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  // زر تسجيل الدخول
                   ElevatedButton(
                     onPressed: _isLoading ? null : _handleLogin,
                     style: ElevatedButton.styleFrom(
@@ -169,7 +165,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // رسالة الخطأ
                   Consumer<TradingProvider>(
                     builder: (context, provider, child) {
                       if (provider.errorMessage != null) {
