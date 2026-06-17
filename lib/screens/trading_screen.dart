@@ -214,6 +214,7 @@ class _TradingScreenState extends State<TradingScreen> {
       } else {
         Fluttertoast.showToast(msg: result['message'] ?? '❌ فشل تنفيذ الصفقة', backgroundColor: Colors.red, textColor: Colors.white);
       }
+      // انتظار 4 دقائق بين الصفقات (سرعة بشرية)
       for (int i = 0; i < 240 && _isTradingActive && mounted; i++) {
         await Future.delayed(const Duration(seconds: 1));
       }
