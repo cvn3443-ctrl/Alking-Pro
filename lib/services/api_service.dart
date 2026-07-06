@@ -2,7 +2,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class ApiService {
-  static const String baseUrl = 'https://alking-pro-trading-server-3.onrender.com';
+  // 🔥 الرابط العام للسيرفر (عدّل حسب الرابط الجديد)
+  static const String baseUrl = 'http://bore.pub:10356';
 
   // ============== دالة اختبار الاتصال ==============
   Future<bool> testConnection() async {
@@ -11,7 +12,7 @@ class ApiService {
         Uri.parse('$baseUrl/health'),
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 10));
-      
+
       print('✅ Connection test: ${response.statusCode}');
       print('✅ Response: ${response.body}');
       return response.statusCode == 200;
@@ -26,7 +27,7 @@ class ApiService {
     try {
       print('📤 Sending login request to: $baseUrl/api/login');
       print('📤 Email: $email');
-      
+
       final response = await http.post(
         Uri.parse('$baseUrl/api/login'),
         headers: {'Content-Type': 'application/json'},
@@ -67,6 +68,36 @@ class ApiService {
     }
   }
 
+  // ============== تحليل فقط (بدون تنفيذ) ==============
+  Future<Map<String, dynamic>> analyzeOnly({
+    required String symbol,
+    required double amount,
+    required bool isDemo,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/trade/analyze'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'symbol': symbol,
+          'amount': amount,
+          'is_demo': isDemo,
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        return {
+          'success': false,
+          'message': 'خطأ في التحليل: ${response.statusCode}'
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'فشل الاتصال بالسيرفر: $e'};
+    }
+  }
+
   // ============== تنفيذ صفقة ==============
   Future<Map<String, dynamic>> executeTrade({
     required String symbol,
@@ -77,20 +108,27 @@ class ApiService {
       final response = await http.post(
         Uri.parse('$baseUrl/api/trade/execute'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'symbol': symbol, 'amount': amount, 'is_demo': isDemo}),
+        body: jsonEncode({
+          'symbol': symbol,
+          'amount': amount,
+          'is_demo': isDemo,
+        }),
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
-        return {'success': false, 'message': 'خطأ في السيرفر: ${response.statusCode}'};
+        return {
+          'success': false,
+          'message': 'خطأ في تنفيذ الصفقة: ${response.statusCode}'
+        };
       }
     } catch (e) {
       return {'success': false, 'message': 'فشل الاتصال بالسيرفر: $e'};
     }
   }
 
-  // ============== إعادة تعيين التداول ==============
+  // ============== إعادة تعيين حالة الإيقاف ==============
   Future<Map<String, dynamic>> resetTrading() async {
     try {
       final response = await http.post(
@@ -102,7 +140,10 @@ class ApiService {
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
-        return {'success': false, 'message': 'فشل إعادة التعيين: ${response.statusCode}'};
+        return {
+          'success': false,
+          'message': 'فشل إعادة التعيين: ${response.statusCode}'
+        };
       }
     } catch (e) {
       return {'success': false, 'message': 'فشل الاتصال بالسيرفر: $e'};
