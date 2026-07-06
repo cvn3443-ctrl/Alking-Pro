@@ -2,8 +2,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class ApiService {
-  // 🔥 الرابط العام للسيرفر (عدّل حسب الرابط الجديد)
-  static const String baseUrl = 'http://bore.pub:10356';
+  // 🔥 الرابط العام للسيرفر (عدّل حسب المنفذ الجديد)
+  static const String baseUrl = 'http://bore.pub:53092';
 
   // ============== دالة اختبار الاتصال ==============
   Future<bool> testConnection() async {
